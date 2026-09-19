@@ -1,0 +1,243 @@
+[
+  {
+    "_comment": "SYNTHETIC TEST DATA: official SAM.gov-shaped contract opportunity fixture.",
+    "source": "samgov",
+    "source_id": "SAM-1001",
+    "solicitationNumber": "SAM-1001",
+    "title": "Modernization of East Bay Fire Station 7",
+    "description": "The Government seeks renovation and modernization services for an active fire station facility, including mechanical upgrades, site improvements, and code compliance work.",
+    "postedDate": "2026-10-10T00:00:00Z",
+    "reponseDeadLine": "2026-11-30T17:00:00Z",
+    "active": true,
+    "type": "Solicitation",
+    "baseType": "Solicitation",
+    "archiveType": "",
+    "naicsCode": "236220",
+    "classificationCode": "M",
+    "organizationName": "City of Oakland Public Works Department",
+    "fullParentPathName": "City of Oakland > Public Works Department",
+    "placeOfPerformance": {
+      "city": "Oakland",
+      "state": "CA",
+      "zip": "94612",
+      "country": "USA"
+    },
+    "uiLink": "https://sam.gov/opp/abc123",
+    "resourceLinks": [
+      "https://sam.gov/opp/abc123/files/plan-set-1.pdf",
+      "https://sam.gov/opp/abc123/files/specs.pdf"
+    ],
+    "pointOfContact": {
+      "type": "Contracting Officer",
+      "fullName": "Jordan Smith",
+      "email": "jordan.smith@example.gov",
+      "phone": "555-010-1234"
+    },
+    "data": {
+      "award": {
+        "amount": 2470000.0,
+        "date": "2026-09-15"
+      }
+    },
+    "provenance": {
+      "fixture": "phase9_samgov_opportunities.json",
+      "synthetic": true,
+      "source_name": "official SAM.gov-shaped opportunity contract",
+      "source_notice_type": "Solicitation"
+    }
+  },
+  {
+    "_comment": "SYNTHETIC TEST DATA: non-construction opportunity intentionally preserved for later filtering.",
+    "source": "samgov",
+    "source_id": "SAM-1002",
+    "solicitationNumber": "SAM-1002",
+    "title": "Managed IT Services for Departmental Support",
+    "description": "IT support and software licensing services for administrative operations.",
+    "postedDate": "2026-10-12T00:00:00Z",
+    "reponseDeadLine": "2026-12-02T17:00:00Z",
+    "active": true,
+    "type": "Solicitation",
+    "baseType": "Solicitation",
+    "archiveType": "",
+    "naicsCode": "541512",
+    "classificationCode": "IT",
+    "organizationName": "Department of Health and Human Services",
+    "fullParentPathName": "Department of Health and Human Services > Office of Administration",
+    "placeOfPerformance": {
+      "city": "Washington",
+      "state": "DC",
+      "zip": "20420",
+      "country": "USA"
+    },
+    "uiLink": "https://sam.gov/opp/xyz456",
+    "resourceLinks": [],
+    "pointOfContact": {
+      "type": "Contracting Officer",
+      "fullName": "Taylor Lee",
+      "email": "taylor.lee@example.gov"
+    },
+    "data": {
+      "award": {
+        "amount": 980000.0,
+        "date": "2026-10-01"
+      }
+    },
+    "provenance": {
+      "fixture": "phase9_samgov_opportunities.json",
+      "synthetic": true,
+      "source_name": "official SAM.gov-shaped opportunity contract",
+      "source_notice_type": "Solicitation"
+    }
+  },
+  {
+    "_comment": "SYNTHETIC TEST DATA: construction opportunity missing optional fields.",
+    "source": "samgov",
+    "source_id": "SAM-1003",
+    "solicitationNumber": "SAM-1003",
+    "title": "Water System Upgrade at Mountain View Treatment Plant",
+    "description": "Upgrade of water treatment plant equipment and associated civil works.",
+    "postedDate": "2026-10-14T00:00:00Z",
+    "reponseDeadLine": "2026-12-18T17:00:00Z",
+    "active": true,
+    "type": "Combined Synopsis/Solicitation",
+    "baseType": "Combined Synopsis/Solicitation",
+    "archiveType": "",
+    "naicsCode": "221310",
+    "classificationCode": "CW",
+    "organizationName": "Regional Utilities Authority",
+    "fullParentPathName": "Regional Utilities Authority > Engineering Division",
+    "placeOfPerformance": {
+      "city": "Mountain View",
+      "state": "CA"
+    },
+    "uiLink": "https://sam.gov/opp/def789",
+    "resourceLinks": [],
+    "data": {
+      "award": {}
+    },
+    "provenance": {
+      "fixture": "phase9_samgov_opportunities.json",
+      "synthetic": true,
+      "source_name": "official SAM.gov-shaped opportunity contract",
+      "source_notice_type": "Combined Synopsis/Solicitation"
+    }
+  },
+  {
+    "_comment": "SYNTHETIC TEST DATA: construction opportunity with multiple resource links.",
+    "source": "samgov",
+    "source_id": "SAM-1004",
+    "solicitationNumber": "SAM-1004",
+    "title": "Road Reconstruction Project – North Corridor",
+    "description": "Reconstruction and resurfacing of roadway segments, drainage improvements, signal upgrades, and utility coordination.",
+    "postedDate": "2026-10-18T00:00:00Z",
+    "reponseDeadLine": "2027-01-08T15:00:00Z",
+    "active": true,
+    "type": "Solicitation",
+    "baseType": "Solicitation",
+    "archiveType": "",
+    "naicsCode": "237310",
+    "classificationCode": "CIV",
+    "organizationName": "State Department of Transportation",
+    "fullParentPathName": "State Department of Transportation > District 4",
+    "placeOfPerformance": {
+      "city": "Reno",
+      "state": "NV",
+      "zip": "89501",
+      "country": "USA"
+    },
+    "uiLink": "https://sam.gov/opp/ghi012",
+    "resourceLinks": [
+      "https://sam.gov/opp/ghi012/files/roadplans.pdf",
+      "https://sam.gov/opp/ghi012/files/traffic-study.pdf",
+      "https://sam.gov/opp/ghi012/files/estimate.xlsx"
+    ],
+    "pointOfContact": {
+      "type": "Procurement Analyst",
+      "fullName": "Morgan Perez",
+      "email": "morgan.perez@example.gov",
+      "phone": "555-010-9876"
+    },
+    "data": {
+      "award": {
+        "amount": 5180000.0,
+        "date": "2026-09-29"
+      }
+    },
+    "provenance": {
+      "fixture": "phase9_samgov_opportunities.json",
+      "synthetic": true,
+      "source_name": "official SAM.gov-shaped opportunity contract",
+      "source_notice_type": "Solicitation"
+    }
+  },
+  {
+    "_comment": "SYNTHETIC TEST DATA: duplicate record intentionally reuses the same source identity.",
+    "source": "samgov",
+    "source_id": "SAM-1001",
+    "solicitationNumber": "SAM-1001",
+    "title": "Modernization of East Bay Fire Station 7",
+    "description": "Duplicate of the first project to prove idempotent duplicate detection.",
+    "postedDate": "2026-10-10T00:00:00Z",
+    "reponseDeadLine": "2026-11-30T17:00:00Z",
+    "active": true,
+    "type": "Solicitation",
+    "baseType": "Solicitation",
+    "archiveType": "",
+    "naicsCode": "236220",
+    "classificationCode": "M",
+    "organizationName": "City of Oakland Public Works Department",
+    "fullParentPathName": "City of Oakland > Public Works Department",
+    "placeOfPerformance": {
+      "city": "Oakland",
+      "state": "CA",
+      "zip": "94612",
+      "country": "USA"
+    },
+    "uiLink": "https://sam.gov/opp/abc123",
+    "resourceLinks": [
+      "https://sam.gov/opp/abc123/files/plan-set-1.pdf"
+    ],
+    "pointOfContact": {
+      "type": "Contracting Officer",
+      "fullName": "Jordan Smith",
+      "email": "jordan.smith@example.gov"
+    },
+    "data": {
+      "award": {
+        "amount": 2470000.0,
+        "date": "2026-09-15"
+      }
+    },
+    "provenance": {
+      "fixture": "phase9_samgov_opportunities.json",
+      "synthetic": true,
+      "source_name": "official SAM.gov-shaped opportunity contract",
+      "source_notice_type": "Solicitation"
+    }
+  },
+  {
+    "_comment": "SYNTHETIC TEST DATA: invalid record missing required source identity.",
+    "source": "samgov",
+    "title": "Invalid Notice Without Identity",
+    "description": "This record is intentionally invalid and should be rejected.",
+    "postedDate": "2026-10-21T00:00:00Z",
+    "reponseDeadLine": "2026-11-25T17:00:00Z",
+    "active": true,
+    "type": "Solicitation",
+    "baseType": "Solicitation",
+    "archiveType": "",
+    "naicsCode": "236210",
+    "classificationCode": "B",
+    "placeOfPerformance": {
+      "city": "Phoenix",
+      "state": "AZ",
+      "zip": "85001"
+    },
+    "uiLink": "https://sam.gov/opp/missing-id",
+    "resourceLinks": [],
+    "provenance": {
+      "fixture": "phase9_samgov_opportunities.json",
+      "synthetic": true
+    }
+  }
+]

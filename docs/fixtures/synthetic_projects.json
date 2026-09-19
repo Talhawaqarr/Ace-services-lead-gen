@@ -1,0 +1,5 @@
+[
+  {"id": "proj-1", "title": "Downtown Library Renovation", "state": "CA", "city": "Sacramento", "trade": ["general"], "estimated_value": 1200000, "bid_date": "2026-12-01", "synthetic": true, "source": "synthetic"},
+  {"id": "proj-2", "title": "Elementary School Addition", "state": "TX", "city": "Houston", "trade": ["general","education"], "estimated_value": 3500000, "bid_date": "2026-11-15", "synthetic": true, "source": "synthetic"},
+  {"id": "proj-3", "title": "Bridge Repair on Route 5", "state": "WA", "city": "Seattle", "trade": ["civil"], "estimated_value": 800000, "bid_date": null, "synthetic": true, "source": "synthetic"}
+]

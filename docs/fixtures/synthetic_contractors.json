@@ -1,0 +1,5 @@
+[
+  {"id": "cont-1", "company_name": "Acme Builders LLC", "state": "CA", "city": "Sacramento", "trades": ["general"], "size": "small", "synthetic": true, "source": "synthetic"},
+  {"id": "cont-2", "company_name": "Lone Star Contractors", "state": "TX", "city": "Houston", "trades": ["general","education"], "size": "medium", "synthetic": true, "source": "synthetic"},
+  {"id": "cont-3", "company_name": "Puget Civil Works", "state": "WA", "city": "Seattle", "trades": ["civil"], "size": "small", "synthetic": true, "source": "synthetic"}
+]
