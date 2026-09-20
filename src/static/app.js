@@ -125,6 +125,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                   <div>
                     <strong>#${escapeHtml(match.ranking)} ${escapeHtml(match.contractor_name || 'Unknown contractor')}</strong>
                     <div class="project-meta">${match.match_score != null ? 'Score ' + match.match_score.toFixed(2) : 'Score unknown'} • ${escapeHtml(match.confidence || 'Unknown')} • ${escapeHtml(match.review_status || 'UNREVIEWED')}</div>
+                    <div class="project-meta">${match.contractor_email ? 'Contact: ' + escapeHtml(match.contractor_email) : 'Contact: email unavailable'}</div>
                   </div>
                   <span class="badge ${statusBadge(match.review_status)}">${escapeHtml(match.review_status || 'UNREVIEWED')}</span>
                 </div>
@@ -149,6 +150,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                 <div>
                   <div class="section-title">Contractor</div>
                   <div>${escapeHtml(selectedMatch.contractor_name || 'Unknown contractor')}</div>
+                  <div class="project-meta">${selectedMatch.contractor_email ? 'Primary email: ' + escapeHtml(selectedMatch.contractor_email) : 'Primary email: unavailable — outreach will be blocked'}</div>
                 </div>
                 <div>
                   <div class="section-title">Match</div>
@@ -171,6 +173,8 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                   <div>${(selectedMatch.unknown_factors || []).length ? selectedMatch.unknown_factors.map(escapeHtml).join('<br>') : 'None'}</div>
                 </div>
                 <div>
+                  <div class="section-title">Outreach</div>
+                  ${selectedMatch.contractor_email ? '<div class="project-meta">Draft recipient: ' + escapeHtml(selectedMatch.contractor_email) + '</div>' : '<div class="muted">No primary email is available. Outreach generation will remain blocked.</div>'}
                   <div class="section-title">Outreach Draft</div>
                   ${selectedMatch.review_status !== 'APPROVED'
                     ? '<div class="muted">Approve this match to generate an outreach draft.</div>'
