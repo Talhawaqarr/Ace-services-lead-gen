@@ -117,3 +117,18 @@ def test_phase12_pipeline_is_fixture_only_by_default():
 
     assert result["opportunities"]["source"] == "samgov"
     assert result["contractors"]["source"] == "samgov"
+
+
+def test_phase12_api_exposes_local_pipeline_endpoint():
+    session = get_session()
+    _reset_phase12(session)
+
+    from fastapi.testclient import TestClient
+    from src.api import app
+
+    response = TestClient(app).post("/pipeline/local/run")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["matches_generated"] > 0
+    assert payload["opportunities"]["source"] == "samgov"
+    assert payload["contractors"]["source"] == "samgov"
