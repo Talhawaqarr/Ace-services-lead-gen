@@ -442,5 +442,6 @@ def run_ingestion(source: str) -> dict[str, Any]:
     with SessionLocal() as session:
         provider = providers[source]()
         summary = ingest_source_records(session, provider, source_name=source)
+        session.commit()
         summary["source"] = source
         return summary
