@@ -78,8 +78,8 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         const html = `
           <div class="workspace-header">
             <div>
-              <h2>${project.name || 'Unknown project'}</h2>
-              <div class="project-meta">${project.city || 'Unknown'}${project.state ? ', ' + project.state : ''} • ${project.bid_date || 'Unknown'}</div>
+              <h2>${escapeHtml(project.name || 'Unknown project')}</h2>
+              <div class="project-meta">${escapeHtml(project.city || 'Unknown')}${project.state ? ', ' + escapeHtml(project.state) : ''} • ${escapeHtml(project.bid_date || 'Unknown')}</div>
             </div>
             <button class="secondary" onclick="refreshProjectMatches()">Refresh</button>
           </div>
@@ -109,13 +109,13 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
 
           <div class="match-list">
             ${matches.length ? matches.map(match => `
-              <div class="match-card ${match.id === state.selectedMatchId ? 'selected' : ''}" data-id="${match.id}">
+              <div class="match-card ${match.id === state.selectedMatchId ? 'selected' : ''}" data-id="${escapeHtml(match.id)}">
                 <div class="match-head">
                   <div>
-                    <strong>#${match.ranking} ${match.contractor_name || 'Unknown contractor'}</strong>
+                    <strong>#${escapeHtml(match.ranking)} ${escapeHtml(match.contractor_name || 'Unknown contractor')}</strong>
                     <div class="project-meta">${match.match_score != null ? 'Score ' + match.match_score.toFixed(2) : 'Score unknown'} • ${escapeHtml(match.confidence || 'Unknown')} • ${escapeHtml(match.review_status || 'UNREVIEWED')}</div>
                   </div>
-                  <span class="badge ${statusBadge(match.review_status)}">${match.review_status || 'UNREVIEWED'}</span>
+                  <span class="badge ${statusBadge(match.review_status)}">${escapeHtml(match.review_status || 'UNREVIEWED')}</span>
                 </div>
                 <div class="actions">
                   <button class="secondary" onclick="openMatch('${match.id}')">Open</button>
@@ -133,7 +133,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
               <div class="evidence">
                 <div>
                   <div class="section-title">Project</div>
-                  <div>${project.name || 'Unknown project'} • ${project.city || 'Unknown'}${project.state ? ', ' + project.state : ''}</div>
+                  <div>${escapeHtml(project.name || 'Unknown project')} • ${escapeHtml(project.city || 'Unknown')}${project.state ? ', ' + escapeHtml(project.state) : ''}</div>
                 </div>
                 <div>
                   <div class="section-title">Contractor</div>
@@ -141,23 +141,23 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                 </div>
                 <div>
                   <div class="section-title">Match</div>
-                  <div>Score: ${selectedMatch.match_score}</div>
+                  <div>Score: ${escapeHtml(selectedMatch.match_score)}</div>
                   <div>Confidence: ${escapeHtml(selectedMatch.confidence || 'Unknown')}</div>
-                  <div>Ranking: ${selectedMatch.ranking}</div>
+                  <div>Ranking: ${escapeHtml(selectedMatch.ranking)}</div>
                   <div>Matcher: ${escapeHtml(selectedMatch.matcher_version || 'Unknown')}</div>
                   <div>Status: ${escapeHtml(selectedMatch.review_status)}</div>
                 </div>
                 <div>
                   <div class="section-title">Positive Factors</div>
-                  <div>${(selectedMatch.positive_factors || []).length ? selectedMatch.positive_factors.join('<br>') : 'None'}</div>
+                  <div>${(selectedMatch.positive_factors || []).length ? selectedMatch.positive_factors.map(escapeHtml).join('<br>') : 'None'}</div>
                 </div>
                 <div>
                   <div class="section-title">Negative Factors</div>
-                  <div>${(selectedMatch.negative_factors || []).length ? selectedMatch.negative_factors.join('<br>') : 'None'}</div>
+                  <div>${(selectedMatch.negative_factors || []).length ? selectedMatch.negative_factors.map(escapeHtml).join('<br>') : 'None'}</div>
                 </div>
                 <div>
                   <div class="section-title">Unknown Factors</div>
-                  <div>${(selectedMatch.unknown_factors || []).length ? selectedMatch.unknown_factors.join('<br>') : 'None'}</div>
+                  <div>${(selectedMatch.unknown_factors || []).length ? selectedMatch.unknown_factors.map(escapeHtml).join('<br>') : 'None'}</div>
                 </div>
                 <div>
                   <div class="section-title">Outreach Draft</div>
@@ -172,7 +172,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                 <div>
                   <div class="section-title">Review History</div>
                   <div id="reviewHistory">
-                    ${state.reviewAudits[selectedMatch.id]?.error ? `<div class="error">${state.reviewAudits[selectedMatch.id].error}</div>` : state.reviewAudits[selectedMatch.id] ? (state.reviewAudits[selectedMatch.id].length ? state.reviewAudits[selectedMatch.id].map(audit => `<div class="match-card"><strong>${escapeHtml(audit.previous_status || 'UNREVIEWED')} → ${escapeHtml(audit.new_status)}</strong><div class="project-meta">Actor: ${escapeHtml(audit.actor || 'Unknown')} • Source: ${escapeHtml(audit.source || 'Unknown')} • ${escapeHtml(audit.created_at || 'Unknown time')}</div></div>`).join('') : '<div class="muted">No review history yet.</div>') : '<div class="muted">Loading review history...</div>'}
+                    ${state.reviewAudits[selectedMatch.id]?.error ? `<div class="error">${escapeHtml(state.reviewAudits[selectedMatch.id].error)}</div>` : state.reviewAudits[selectedMatch.id] ? (state.reviewAudits[selectedMatch.id].length ? state.reviewAudits[selectedMatch.id].map(audit => `<div class="match-card"><strong>${escapeHtml(audit.previous_status || 'UNREVIEWED')} → ${escapeHtml(audit.new_status)}</strong><div class="project-meta">Actor: ${escapeHtml(audit.actor || 'Unknown')} • Source: ${escapeHtml(audit.source || 'Unknown')} • ${escapeHtml(audit.created_at || 'Unknown time')}</div></div>`).join('') : '<div class="muted">No review history yet.</div>') : '<div class="muted">Loading review history...</div>'}
                   </div>
                 </div>
               </div>
