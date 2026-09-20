@@ -166,7 +166,16 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     place = raw.get("placeOfPerformance") or {}
     state = _normalize_state((raw.get("state") or place.get("state") or (raw.get("location") or {}).get("state")))
     city = _normalize_city((raw.get("city") or place.get("city") or (raw.get("location") or {}).get("city")))
-    bid_date = _normalize_date(raw.get("bid_date") or raw.get("bidDate") or raw.get("postedDate"))
+    posted_date = _normalize_date(raw.get("posted_date") or raw.get("postedDate"))
+    response_deadline = _normalize_date(raw.get("response_deadline") or raw.get("responseDeadline") or raw.get("reponseDeadLine"))
+    bid_date = _normalize_date(raw.get("bid_date") or raw.get("bidDate") or posted_date)
+    raw_active = raw.get("active")
+    if isinstance(raw_active, bool):
+        status = "ACTIVE" if raw_active else "INACTIVE"
+    else:
+        status = _normalized_text(raw.get("status") or raw_active or raw.get("type"))
+    description = _normalized_text(raw.get("description"))
+    source_url = _normalized_text(raw.get("uiLink") or raw.get("source_url"))
     estimated_value = _normalize_numeric(raw.get("estimated_value") or raw.get("estimatedValue"))
     trades = _normalize_trades(raw.get("trades") or raw.get("trade") or raw.get("project_type"))
 
@@ -192,6 +201,11 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
         "longitude": raw.get("longitude"),
         "trades": trades,
         "bid_date": bid_date,
+        "posted_date": posted_date,
+        "response_deadline": response_deadline,
+        "status": status,
+        "description": description,
+        "source_url": source_url,
         "estimated_value": estimated_value,
         "provenance": {
             "source": source,
@@ -347,6 +361,16 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
                 canonical.state = normalized["state"]
             if canonical.bid_date is None and normalized.get("bid_date"):
                 canonical.bid_date = normalized["bid_date"]
+            if canonical.posted_date is None and normalized.get("posted_date"):
+                canonical.posted_date = normalized["posted_date"]
+            if canonical.response_deadline is None and normalized.get("response_deadline"):
+                canonical.response_deadline = normalized["response_deadline"]
+            if canonical.status is None and normalized.get("status"):
+                canonical.status = normalized["status"]
+            if canonical.description is None and normalized.get("description"):
+                canonical.description = normalized["description"]
+            if canonical.source_url is None and normalized.get("source_url"):
+                canonical.source_url = normalized["source_url"]
             if canonical.estimated_value is None and normalized.get("estimated_value") is not None:
                 canonical.estimated_value = normalized["estimated_value"]
             if canonical.trades in (None, []) and normalized.get("trades"):
@@ -366,6 +390,11 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
             longitude=normalized.get("longitude"),
             trades=normalized.get("trades"),
             bid_date=normalized.get("bid_date"),
+            posted_date=normalized.get("posted_date"),
+            response_deadline=normalized.get("response_deadline"),
+            status=normalized.get("status"),
+            description=normalized.get("description"),
+            source_url=normalized.get("source_url"),
             estimated_value=normalized.get("estimated_value"),
             provenance=normalized.get("provenance"),
         )
