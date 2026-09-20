@@ -120,7 +120,7 @@ def test_phase11_raw_payload_and_provenance_are_preserved():
 
     ingest_contractors(session, provider, source_name="samgov")
 
-    raw = session.query(RawProject).filter(RawProject.source == "samgov", RawProject.source_id == "SAMC-1001").one()
+    raw = session.query(RawContractor).filter(RawContractor.source == "samgov", RawContractor.source_id == "SAMC-1001").one()
     assert raw.raw_payload["source_id"] == "SAMC-1001"
     assert raw.raw_payload["notes"] == "SYNTHETIC TEST DATA"
     contractor = session.query(Contractor).filter(Contractor.source == "samgov", Contractor.source_id == "SAMC-1001").one()
