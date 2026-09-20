@@ -338,6 +338,11 @@ def get_project_matches(
                 "description": project_row.description,
                 "source_url": project_row.source_url,
                 "estimated_value": project_row.estimated_value,
+                "construction_relevance": (
+                    (project_row.provenance or {}).get("construction_relevance")
+                    if isinstance(project_row.provenance, dict)
+                    else None
+                ),
             },
             matches=match_items,
             summary=summary,
