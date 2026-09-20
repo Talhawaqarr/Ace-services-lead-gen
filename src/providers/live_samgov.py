@@ -16,9 +16,9 @@ class SAMGovRateLimitError(RuntimeError):
 class LiveSAMGovProvider(OpportunityProvider):
     """Live SAM.gov Contract Opportunities API provider.
 
-    Uses the official public Contract Opportunities API. The provider can
-    transparently paginate a complete sync while retaining page-token behavior
-    for callers that need one page at a time.
+    Uses the official public Contract Opportunities API. Pagination is
+    bounded by max_pages for predictable request budgets while retaining
+    page-token behavior for callers that need one page at a time.
     """
 
     source_name = "samgov"
