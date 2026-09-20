@@ -60,3 +60,15 @@ Security policies for the ACE Services platform. This covers secrets, authentica
 - Define incident response playbooks for data breach, provider key leaks, or mass bounces detected by email provider.
 
 This security baseline is a starting point and must be adapted to ACE's operational compliance needs.
+
+## Phase 16 API authentication
+
+The API uses a bearer token at the HTTP boundary when APP_ENV=production.
+
+- Configure API_AUTH_TOKEN as a server-side secret.
+- Requests without Authorization: Bearer <token> receive HTTP 401.
+- Invalid bearer tokens receive HTTP 401.
+- The token is compared using constant-time comparison and is never returned by the config endpoint.
+- /health and /health/ready remain public so deployment health checks can work without credentials.
+- Development, test, and staging environments keep authentication disabled by default so local development remains zero-cost and simple.
+- This is an API access boundary, not a full user/RBAC system. Per-user identities, OAuth/OIDC, roles, and granular permissions remain future work before multi-user production use.
