@@ -3,11 +3,16 @@ from pathlib import Path
 
 from src.db import get_session
 from src.ingestion.service import ingest_source_records
-from src.models.core import IngestionRun, Project, RawProject
+from src.models.core import IngestionRun, MatchRecord, MatchReviewAudit, Project, RawProject
 from src.providers.samgov import SAMGovProvider
 
 
 def _reset_source_data(session):
+    project_ids = [row[0] for row in session.query(Project.id).filter(Project.source == "samgov").all()]
+    match_ids = [row[0] for row in session.query(MatchRecord.id).filter(MatchRecord.project_id.in_(project_ids)).all()] if project_ids else []
+    if match_ids:
+        session.query(MatchReviewAudit).filter(MatchReviewAudit.match_id.in_(match_ids)).delete(synchronize_session=False)
+        session.query(MatchRecord).filter(MatchRecord.id.in_(match_ids)).delete(synchronize_session=False)
     session.query(Project).filter(Project.source == "samgov").delete(synchronize_session=False)
     session.query(RawProject).filter(RawProject.source == "samgov").delete(synchronize_session=False)
     session.query(IngestionRun).filter(IngestionRun.source == "samgov").delete(synchronize_session=False)
