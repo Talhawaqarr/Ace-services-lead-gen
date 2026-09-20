@@ -4,9 +4,10 @@ import uuid
 from typing import Any
 
 from sqlalchemy import select
+from datetime import datetime
 from sqlalchemy.orm import Session
 
-from src.models.core import Contractor, MatchRecord, OutreachDraft, Project
+from src.models.core import Contractor, MatchRecord, OutreachDraft, OutreachDraftAudit, Project
 
 TEMPLATE_VERSION = "deterministic-v1"
 
@@ -79,3 +80,62 @@ def build_outreach_draft(session: Session, match_id: str, actor: str = "local-de
     session.add(draft)
     session.flush()
     return draft
+
+
+VALID_DRAFT_STATUSES = {"DRAFT", "APPROVED", "REJECTED"}
+VALID_DRAFT_TRANSITIONS = {
+    "DRAFT": {"APPROVED", "REJECTED"},
+    "APPROVED": {"REJECTED"},
+    "REJECTED": {"APPROVED"},
+}
+
+
+def set_outreach_draft_status(
+    session: Session,
+    draft_id: str,
+    new_status: str,
+    actor: str = "local-dev",
+    source: str = "local-dev",
+) -> OutreachDraft:
+    draft_uuid = _coerce_uuid(draft_id, "draft_id")
+    draft = session.get(OutreachDraft, draft_uuid)
+    if draft is None:
+        raise LookupError(f"Outreach draft not found: {draft_id}")
+
+    normalized = new_status.strip().upper()
+    if normalized not in VALID_DRAFT_STATUSES:
+        raise ValueError(f"Invalid outreach draft status: {new_status}")
+
+    previous = draft.status or "DRAFT"
+    if previous == normalized:
+        return draft
+    if normalized not in VALID_DRAFT_TRANSITIONS.get(previous, set()):
+        raise ValueError(f"Invalid outreach draft transition: {previous} -> {normalized}")
+
+    draft.status = normalized
+    draft.approved_at = datetime.utcnow() if normalized == "APPROVED" else None
+    draft.approved_by = actor if normalized == "APPROVED" else None
+    draft.updated_at = datetime.utcnow()
+    session.add(
+        OutreachDraftAudit(
+            draft_id=draft.id,
+            previous_status=previous,
+            new_status=normalized,
+            actor=actor,
+            source=source,
+        )
+    )
+    session.flush()
+    return draft
+
+
+def list_outreach_draft_audits(session: Session, draft_id: str) -> list[OutreachDraftAudit]:
+    draft_uuid = _coerce_uuid(draft_id, "draft_id")
+    draft = session.get(OutreachDraft, draft_uuid)
+    if draft is None:
+        raise LookupError(f"Outreach draft not found: {draft_id}")
+    return session.execute(
+        select(OutreachDraftAudit)
+        .where(OutreachDraftAudit.draft_id == draft.id)
+        .order_by(OutreachDraftAudit.created_at.asc(), OutreachDraftAudit.id.asc())
+    ).scalars().all()

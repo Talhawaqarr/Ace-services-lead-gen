@@ -173,3 +173,18 @@ class OutreachDraft(Base, TimestampMixin):
         Index("ix_outreach_drafts_match_id", "match_id"),
         Index("ix_outreach_drafts_status", "status"),
     )
+
+
+class OutreachDraftAudit(Base, TimestampMixin):
+    __tablename__ = "outreach_draft_audit"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    draft_id = Column(UUID(as_uuid=True), ForeignKey("outreach_drafts.id"), nullable=False)
+    previous_status = Column(String, nullable=False)
+    new_status = Column(String, nullable=False)
+    actor = Column(String, nullable=False, default="local-dev")
+    source = Column(String, nullable=False, default="local-dev")
+
+    __table_args__ = (
+        Index("ix_outreach_draft_audit_draft_id", "draft_id"),
+    )
