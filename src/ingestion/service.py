@@ -92,6 +92,35 @@ def _normalize_numeric(value: Any) -> float | None:
         return None
 
 
+def _derive_project_trades(raw: dict[str, Any]) -> list[str] | None:
+    explicit = _normalize_trades(raw.get("trades") or raw.get("trade") or raw.get("project_type"))
+    if explicit:
+        return explicit
+
+    naics = str(raw.get("naicsCode") or raw.get("naics_code") or "").strip()
+    text = " ".join(
+        str(raw.get(key) or "")
+        for key in ("title", "description", "classificationCode")
+    ).lower()
+
+    if naics.startswith("236"):
+        return ["general"]
+    if naics.startswith(("237", "221")):
+        return ["civil"]
+
+    signal_map = (
+        ("electrical", "electrical"),
+        ("plumbing", "plumbing"),
+        ("roofing", "roofing"),
+        ("concrete", "concrete"),
+        ("landscap", "landscaping"),
+    )
+    for token, trade in signal_map:
+        if token in text:
+            return [trade]
+    return None
+
+
 def _normalize_trades(value: Any) -> list[str] | None:
     if value is None:
         return None
@@ -177,7 +206,7 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     description = _normalized_text(raw.get("description"))
     source_url = _normalized_text(raw.get("uiLink") or raw.get("source_url"))
     estimated_value = _normalize_numeric(raw.get("estimated_value") or raw.get("estimatedValue"))
-    trades = _normalize_trades(raw.get("trades") or raw.get("trade") or raw.get("project_type"))
+    trades = _derive_project_trades(raw)
 
     if raw.get("state") and len(str(raw.get("state"))) > 2:
         state = _normalize_state(raw.get("state").split()[0])
