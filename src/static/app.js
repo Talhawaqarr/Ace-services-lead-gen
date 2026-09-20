@@ -408,7 +408,10 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         if (status) status.textContent = 'Running one bounded live SAM.gov request…';
         state.demo.status = 'running';
         try {
-          const response = await fetch('/demo/run?keyword=36C26126Q1279&state=CA', { method: 'POST' });
+          const keyword = (document.getElementById('demoKeyword')?.value || '36C26126Q1279').trim();
+          const demoState = (document.getElementById('demoState')?.value || 'CA').trim().toUpperCase();
+          const params = new URLSearchParams({ keyword, state: demoState });
+          const response = await fetch('/demo/run?' + params.toString(), { method: 'POST' });
           const body = await readJson(response);
           if (!response.ok) throw new Error(body.detail || 'Demo run failed');
           state.demo = { status: 'complete', result: body };
