@@ -317,6 +317,14 @@ def generate_project_matches(project_id: str) -> dict[str, Any]:
         return {"generated": len(matches), "project_id": str(project_row.id)}
 
 
+@app.post("/pipeline/local/run")
+def run_local_pipeline() -> dict[str, Any]:
+    with SessionLocal() as session:
+        summary = run_local_fixture_pipeline(session)
+        session.commit()
+        return summary
+
+
 @app.get("/ingestion/sources")
 def list_ingestion_sources() -> dict[str, Any]:
     return {
