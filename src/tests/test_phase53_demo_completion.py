@@ -43,6 +43,7 @@ def test_demo_uses_one_record_construction_filter(monkeypatch):
         samgov_api_key="secret",
     )
     provider = Mock()
+    provider_factory = Mock(return_value=provider)
     pipeline_summary = {
         "demo": True,
         "opportunities": {"records_fetched": 1, "accepted": 1, "rejected": 0, "duplicates": 0, "errors": 0},
@@ -55,7 +56,7 @@ def test_demo_uses_one_record_construction_filter(monkeypatch):
     session_context = SessionContext(session)
 
     monkeypatch.setattr(api, "get_settings", lambda: settings)
-    monkeypatch.setattr(api, "LiveSAMGovProvider", lambda *args, **kwargs: provider)
+    monkeypatch.setattr(api, "LiveSAMGovProvider", provider_factory)
     monkeypatch.setattr(api, "SAMGovContractorProvider", lambda: Mock())
     monkeypatch.setattr(api, "SessionLocal", lambda: session_context)
     monkeypatch.setattr(api, "run_demo_pipeline", Mock(return_value=pipeline_summary))
@@ -71,7 +72,6 @@ def test_demo_uses_one_record_construction_filter(monkeypatch):
         "naics": "236220",
         "limit": 1,
     }
-    provider_factory = api.LiveSAMGovProvider
     assert provider_factory.call_args.kwargs["max_pages"] == 1
     session.commit.assert_called_once()
 
