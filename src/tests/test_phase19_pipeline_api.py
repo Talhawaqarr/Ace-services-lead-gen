@@ -34,7 +34,8 @@ def test_local_pipeline_persists_matches_and_is_idempotent():
         offset += 100
 
     sam_projects_by_source_id = {item["source_id"]: item for item in sam_projects}
-    assert {"SAM-1001", "SAM-1002", "SAM-1003", "SAM-1004"} <= set(sam_projects_by_source_id)
+    assert {"SAM-1001", "SAM-1003", "SAM-1004"} <= set(sam_projects_by_source_id)
+    assert "SAM-1002" not in sam_projects_by_source_id
 
     project = sam_projects_by_source_id["SAM-1001"]
     matches = client.get(f"/projects/{project['id']}/matches")
