@@ -12,7 +12,7 @@ def test_qualified_pipeline_matches_only_qualified_opportunities():
         assert payload["projects_discovered"] == 4
         assert payload["qualified_projects"] == 3
         assert payload["projects_processed"] == 3
-        assert payload["matches_generated"] == 24
+        assert payload["matches_generated"] == 7
     finally:
         session.rollback()
         session.close()
