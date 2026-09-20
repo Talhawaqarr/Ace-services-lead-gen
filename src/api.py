@@ -4,11 +4,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from src.db import SessionLocal
@@ -19,7 +19,7 @@ from src.providers.usaspending import USASpendingProvider
 from src.pipeline.service import run_local_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
 
-app = FastAPI(title="ACE Services Review API", version="0.4.0")
+app = FastAPI(title="ACE Services Review API", version="0.5.0")
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 
 
@@ -90,10 +90,21 @@ def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
+
+@app.get("/health/ready")
+def readiness_check() -> dict[str, str]:
+    try:
+        with SessionLocal() as session:
+            session.execute(text("SELECT 1"))
+        return {"status": "ready", "database": "ok"}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc
+
+
 @app.get("/projects", response_model=list[ProjectSummary])
-def list_projects() -> list[ProjectSummary]:
+def list_projects(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> list[ProjectSummary]:
     with SessionLocal() as session:
-        rows = session.execute(select(Project).order_by(Project.name.asc())).scalars().all()
+        rows = session.execute(select(Project).order_by(Project.name.asc()).offset(offset).limit(limit)).scalars().all()
         items: list[ProjectSummary] = []
         for row in rows:
             items.append(
@@ -112,6 +123,27 @@ def list_projects() -> list[ProjectSummary]:
                 )
             )
         return items
+
+
+
+@app.get("/contractors", response_model=list[ContractorSummary])
+def list_contractors(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> list[ContractorSummary]:
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(Contractor)
+            .order_by(Contractor.company_name.asc())
+            .offset(offset)
+            .limit(limit)
+        ).scalars().all()
+        return [
+            ContractorSummary(
+                id=str(row.id),
+                company_name=row.company_name,
+                city=row.city,
+                state=row.state,
+            )
+            for row in rows
+        ]
 
 
 @app.get("/projects/{project_id}", response_model=dict[str, Any])
