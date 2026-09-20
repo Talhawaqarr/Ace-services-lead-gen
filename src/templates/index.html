@@ -217,13 +217,20 @@
       }
 
       async function loadProjects() {
-        const response = await fetch('/projects');
-        const projects = await response.json();
-        state.projects = projects;
-        if (!state.selectedProjectId && projects.length) {
-          selectProject(projects[0].id);
+        try {
+          const response = await fetch('/projects');
+          if (!response.ok) throw new Error('Unable to load projects');
+          const projects = await response.json();
+          state.projects = projects;
+          if (!state.selectedProjectId && projects.length) {
+            selectProject(projects[0].id);
+          }
+          renderProjects();
+        } catch (error) {
+          state.message = { type: 'error', text: error.message };
+          renderProjects();
+          renderWorkspace();
         }
-        renderProjects();
       }
 
       async function refreshProjectMatches() {
@@ -234,11 +241,11 @@
           const response = await fetch(`/projects/${state.selectedProjectId}/matches?${params.toString()}`);
           if (!response.ok) throw new Error('Unable to load matches');
           state.projectMatches = await response.json();
-          if (state.projectMatches.matches.length) {
-            state.selectedMatchId = state.projectMatches.matches[0].id;
-          } else {
-            state.selectedMatchId = null;
+          const visibleMatchIds = new Set(state.projectMatches.matches.map(match => match.id));
+          if (!visibleMatchIds.has(state.selectedMatchId)) {
+            state.selectedMatchId = state.projectMatches.matches[0]?.id || null;
           }
+          state.message = null;
           renderWorkspace();
         } catch (error) {
           state.message = { type: 'error', text: error.message };
