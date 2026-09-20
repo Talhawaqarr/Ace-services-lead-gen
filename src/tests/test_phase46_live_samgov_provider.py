@@ -108,3 +108,37 @@ def test_live_provider_rejects_missing_api_key():
         assert "SAMGOV_API_KEY" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_live_provider_stops_at_max_pages_without_failing():
+    offsets = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        offset = int(request.url.params["offset"])
+        offsets.append(offset)
+        return httpx.Response(
+            200,
+            json={
+                "totalRecords": 3,
+                "limit": 1,
+                "offset": offset,
+                "opportunitiesData": [
+                    {
+                        "noticeId": f"N-{offset + 1}",
+                        "solicitationNumber": f"S-{offset + 1}",
+                        "title": "Build",
+                    }
+                ],
+            },
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    provider = LiveSAMGovProvider("secret", http_client=client, max_pages=1)
+
+    result = provider.list_projects({"limit": 1})
+
+    assert offsets == [0]
+    assert len(result["projects"]) == 1
+    assert result["meta"]["pages_fetched"] == 1
+    assert result["meta"]["records_returned"] == 1
+    assert result["meta"]["pagination_truncated"] is True
