@@ -300,11 +300,24 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
             const body = await readJson(response);
             if (!response.ok) throw new Error(body.detail || 'Unable to load outreach draft');
             state.outreachDrafts[matchId] = body;
+            await loadOutreachQueue(body.id);
           }
         } catch (error) {
           state.outreachDrafts[matchId] = { error: error.message };
         }
         renderWorkspace();
+      }
+
+      async function loadOutreachQueue(draftId) {
+        try {
+          const response = await fetch('/outreach-queue?limit=100');
+          const body = await readJson(response);
+          if (!response.ok) throw new Error(body.detail || 'Unable to load outreach queue');
+          const item = body.find(entry => entry.draft_id === draftId);
+          if (item) state.outreachQueue[draftId] = item;
+        } catch (error) {
+          state.message = { type: 'error', text: error.message };
+        }
       }
 
       async function generateOutreachDraft(matchId) {
@@ -332,6 +345,8 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
           const body = await readJson(response);
           if (!response.ok) throw new Error(body.detail || 'Unable to update outreach draft');
           state.outreachDrafts[matchId] = body;
+          if (status !== 'APPROVED') delete state.outreachQueue[draftId];
+          await loadOutreachQueue(draftId);
           state.message = { type: 'success', text: 'Outreach draft marked ' + status + '.' };
           await loadOutreachDraftReviews(draftId);
           renderWorkspace();
