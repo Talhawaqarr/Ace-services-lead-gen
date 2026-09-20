@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.ingestion.service import ingest_contractors, ingest_source_records
-from src.models.core import Contractor, Project
+from src.models.core import Contractor, Project, RawProject
 from src.opportunity.service import qualifies_opportunity
 from src.providers.samgov import SAMGovProvider
 from src.providers.samgov_contractors import SAMGovContractorProvider
@@ -193,6 +194,7 @@ def run_demo_pipeline(
 ) -> dict[str, Any]:
     """Run the bounded live-data demo path through qualification and matching."""
     contractor_provider = contractor_provider or SAMGovContractorProvider()
+    started_at = datetime.now(timezone.utc)
 
     opportunity_summary = ingest_source_records(
         session,
@@ -206,9 +208,21 @@ def run_demo_pipeline(
         source_name="samgov",
     )
 
+    demo_source_ids = session.execute(
+        select(RawProject.source_id)
+        .where(
+            RawProject.source == "samgov",
+            RawProject.fetched_at >= started_at,
+            RawProject.status.in_(["ACCEPTED", "DUPLICATE"]),
+        )
+    ).scalars().all()
+
     projects = session.execute(
         select(Project)
-        .where(Project.source == "samgov")
+        .where(
+            Project.source == "samgov",
+            Project.source_id.in_(demo_source_ids),
+        )
         .order_by(Project.response_deadline.asc().nullslast(), Project.name.asc())
     ).scalars().all()
 
