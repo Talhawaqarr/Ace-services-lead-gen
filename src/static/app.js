@@ -124,7 +124,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                   <button class="skip" onclick="reviewMatch('${match.id}', 'SKIPPED')">Skip</button>
                 </div>
               </div>
-            `).join('') : '<p class="muted">No matches have been generated for this project yet.</p>'}
+            `).join('') : '<div class="empty"><p class="muted">No matches have been generated for this opportunity.</p><button class="secondary" onclick="generateMatches(\'' + escapeHtml(project.id) + '\')">Generate contractor matches</button></div>'}
           </div>
 
           ${selectedMatch ? `
@@ -237,6 +237,19 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         if (state.matchOffset + state.matchLimit < total) {
           state.matchOffset += state.matchLimit;
           refreshProjectMatches();
+        }
+      }
+
+      async function generateMatches(projectId) {
+        try {
+          const response = await fetch('/projects/' + projectId + '/matches/generate', { method: 'POST' });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.detail || 'Unable to generate contractor matches');
+          state.message = { type: 'success', text: 'Generated ' + (body.generated ?? 0) + ' contractor matches.' };
+          await refreshProjectMatches();
+        } catch (error) {
+          state.message = { type: 'error', text: error.message };
+          renderWorkspace();
         }
       }
 
