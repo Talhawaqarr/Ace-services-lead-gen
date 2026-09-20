@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from fastapi.testclient import TestClient
 
 from src.api import app
@@ -59,24 +61,26 @@ def _seed(source: str, qualified: bool) -> str:
 
 
 def test_match_generation_rejects_unqualified_opportunity():
-    project_id = _seed("phase29-unqualified", qualified=False)
+    source = f"phase29-unqualified-{uuid.uuid4().hex}"
+    project_id = _seed(source, qualified=False)
     try:
         response = client.post(f"/projects/{project_id}/matches/generate")
         assert response.status_code == 409
         assert response.json()["detail"] == "Opportunity does not qualify for matching"
     finally:
-        _cleanup_source("phase29-unqualified")
+        _cleanup_source(source)
 
 
 def test_match_generation_uses_filtered_candidates_for_qualified_opportunity():
-    project_id = _seed("phase29-qualified", qualified=True)
+    source = f"phase29-qualified-{uuid.uuid4().hex}"
+    project_id = _seed(source, qualified=True)
     session = SessionLocal()
     try:
         session.add(
             Contractor(
                 company_name="Wrong State",
                 normalized_name="wrong state",
-                source="phase29-qualified",
+                source=source,
                 source_id="wrong-state",
                 state="WA",
                 trades=["general"],
@@ -101,4 +105,4 @@ def test_match_generation_uses_filtered_candidates_for_qualified_opportunity():
         assert response.status_code == 200
         assert response.json()["generated"] == 1
     finally:
-        _cleanup_source("phase29-qualified")
+        _cleanup_source(source)
