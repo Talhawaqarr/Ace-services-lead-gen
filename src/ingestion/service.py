@@ -69,6 +69,20 @@ def _normalize_city(value: Any) -> str | None:
     return cleaned.title()
 
 
+def _normalize_active_status(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return "ACTIVE" if value else "INACTIVE"
+    cleaned = _normalized_text(value)
+    if cleaned is None:
+        return None
+    normalized = cleaned.lower()
+    if normalized in {"yes", "true", "1", "active"}:
+        return "ACTIVE"
+    if normalized in {"no", "false", "0", "inactive", "archived"}:
+        return "INACTIVE"
+    return cleaned
+
+
 def _normalize_date(value: Any) -> str | None:
     if value is None:
         return None
@@ -199,10 +213,9 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     response_deadline = _normalize_date(raw.get("response_deadline") or raw.get("responseDeadline") or raw.get("reponseDeadLine"))
     bid_date = _normalize_date(raw.get("bid_date") or raw.get("bidDate") or posted_date)
     raw_active = raw.get("active")
-    if isinstance(raw_active, bool):
-        status = "ACTIVE" if raw_active else "INACTIVE"
-    else:
-        status = _normalized_text(raw.get("status") or raw_active or raw.get("type"))
+    status = _normalize_active_status(raw_active or raw.get("status"))
+    if status is None and source != "samgov":
+        status = _normalized_text(raw.get("type"))
     description = _normalized_text(raw.get("description"))
     source_url = _normalized_text(raw.get("uiLink") or raw.get("source_url"))
     estimated_value = _normalize_numeric(raw.get("estimated_value") or raw.get("estimatedValue"))
