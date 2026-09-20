@@ -198,7 +198,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         try {
           const response = await fetch('/opportunities?limit=100&active_only=true&construction_only=true');
           if (!response.ok) throw new Error('Unable to load projects');
-          const projects = await response.json();
+          const projects = await readJson(response);
           state.projects = projects.map(project => ({ ...project, match_count: project.match_count ?? 0 }));
           populateStateFilter();
           if (!state.selectedProjectId && projects.length) {
@@ -258,7 +258,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
       async function generateMatches(projectId) {
         try {
           const response = await fetch('/projects/' + projectId + '/matches/generate', { method: 'POST' });
-          const body = await response.json();
+          const body = await readJson(response);
           if (!response.ok) throw new Error(body.detail || 'Unable to generate contractor matches');
           state.message = { type: 'success', text: 'Generated ' + (body.generated ?? 0) + ' contractor matches.' };
           await refreshProjectMatches();
@@ -283,7 +283,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
           if (response.status === 404) {
             state.outreachDrafts[matchId] = null;
           } else {
-            const body = await response.json();
+            const body = await readJson(response);
             if (!response.ok) throw new Error(body.detail || 'Unable to load outreach draft');
             state.outreachDrafts[matchId] = body;
           }
@@ -296,7 +296,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
       async function generateOutreachDraft(matchId) {
         try {
           const response = await fetch('/matches/' + matchId + '/outreach-draft', { method: 'POST' });
-          const body = await response.json();
+          const body = await readJson(response);
           if (!response.ok) throw new Error(body.detail || 'Unable to generate outreach draft');
           state.outreachDrafts[matchId] = body;
           state.message = { type: 'success', text: 'Outreach draft generated.' };
@@ -315,7 +315,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
           });
-          const body = await response.json();
+          const body = await readJson(response);
           if (!response.ok) throw new Error(body.detail || 'Unable to update outreach draft');
           state.outreachDrafts[matchId] = body;
           state.message = { type: 'success', text: 'Outreach draft marked ' + status + '.' };
@@ -330,7 +330,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
       async function loadOutreachDraftReviews(draftId) {
         try {
           const response = await fetch('/outreach-drafts/' + draftId + '/reviews');
-          const body = await response.json();
+          const body = await readJson(response);
           if (!response.ok) throw new Error(body.detail || 'Unable to load outreach draft history');
           state.outreachAudits[draftId] = body;
         } catch (error) {
@@ -341,7 +341,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
       async function loadMatchReviews(matchId) {
         try {
           const response = await fetch(`/matches/${matchId}/reviews`);
-          const body = await response.json();
+          const body = await readJson(response);
           if (!response.ok) throw new Error(body.detail || 'Unable to load review history');
           state.reviewAudits[matchId] = body;
         } catch (error) {
@@ -364,7 +364,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
           });
-          const body = await response.json();
+          const body = await readJson(response);
           if (!response.ok) throw new Error(body.detail || 'Review action failed');
           state.message = { type: 'success', text: `Match marked ${status}.` };
           await refreshProjectMatches();
