@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 
 
@@ -21,8 +21,8 @@ class Settings:
     email_provider: str
     llm_provider: str
     dry_run: bool
-    samgov_api_key: str | None
-    max_emails_per_hour: int
+    samgov_api_key: str | None = field(default=None, repr=False)
+    max_emails_per_hour: int = 100
 
     @property
     def is_production(self) -> bool:
