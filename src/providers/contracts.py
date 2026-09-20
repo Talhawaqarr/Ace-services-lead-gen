@@ -1,0 +1,40 @@
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+
+class OpportunityProvider(Protocol):
+    source_name: str
+
+    def list_projects(
+        self,
+        filters: dict[str, Any] | None = None,
+        page_token: str | None = None,
+    ) -> dict[str, Any]:
+        ...
+
+    def get_project_details(self, source_id: str) -> dict[str, Any]:
+        ...
+
+    def health_check(self) -> dict[str, Any]:
+        ...
+
+
+class ContractorProvider(Protocol):
+    source_name: str
+
+    def list_contractors(
+        self,
+        filters: dict[str, Any] | None = None,
+        page_token: str | None = None,
+    ) -> dict[str, Any]:
+        ...
+
+    def get_contractor_details(self, source_id: str) -> dict[str, Any]:
+        ...
+
+    def health_check(self) -> dict[str, Any]:
+        ...
+
+
+__all__ = ["ContractorProvider", "OpportunityProvider"]
