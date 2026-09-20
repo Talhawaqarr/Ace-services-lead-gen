@@ -20,9 +20,9 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
           const item = document.createElement('li');
           item.className = 'project-item' + (project.id === state.selectedProjectId ? ' active' : '');
           item.innerHTML = `
-            <div><strong>${escapeHtml(escapeHtml(project.name || 'Unknown project'))}</strong></div>
-            <div class="project-meta">${escapeHtml(escapeHtml(project.city || 'Unknown'))}${, escapeHtml(project.state) : ''}</div>
-            <div class="project-meta">Bid: ${escapeHtml(escapeHtml(project.bid_date || 'Unknown'))}</div>
+            <div><strong>${escapeHtml(project.name || 'Unknown project')}</strong></div>
+            <div class="project-meta">${escapeHtml(project.city || 'Unknown')}${project.state ? ', ' + escapeHtml(project.state) : ''}</div>
+            <div class="project-meta">Bid: ${escapeHtml(project.bid_date || 'Unknown')}</div>
             <div class="project-meta">Matches: ${project.match_count ?? 0}</div>
           `;
           item.onclick = () => selectProject(project.id);
@@ -63,8 +63,8 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         const html = `
           <div class="workspace-header">
             <div>
-              <h2>${escapeHtml(escapeHtml(project.name || 'Unknown project'))}</h2>
-              <div class="project-meta">${escapeHtml(escapeHtml(project.city || 'Unknown'))}${, escapeHtml(project.state) : ''} • ${escapeHtml(escapeHtml(project.bid_date || 'Unknown'))}</div>
+              <h2>${project.name || 'Unknown project'}</h2>
+              <div class="project-meta">${project.city || 'Unknown'}${project.state ? ', ' + project.state : ''} • ${project.bid_date || 'Unknown'}</div>
             </div>
             <button class="secondary" onclick="refreshProjectMatches()">Refresh</button>
           </div>
@@ -77,7 +77,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
             <span class="badge">${summary.skipped ?? 0} Skipped</span>
           </div>
 
-          ${state.message ? `<div class="${state.message.type}">${state.message.text}</div>` : ''}
+          ${state.message ? `<div class="${state.message.type}">${escapeHtml(state.message.text)}</div>` : ''}
 
           <div class="actions">
             <select id="matchStatusFilter" class="secondary" onchange="changeMatchStatus(this.value)">
@@ -97,8 +97,8 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
               <div class="match-card ${match.id === state.selectedMatchId ? 'selected' : ''}" data-id="${match.id}">
                 <div class="match-head">
                   <div>
-                    <strong>#${match.ranking} ${escapeHtml(match.contractor_name || 'Unknown contractor')}</strong>
-                    <div class="project-meta">${match.match_score != null ? 'Score ' + match.match_score.toFixed(2) : 'Score unknown'} • ${match.confidence || 'Unknown'} • ${match.review_status || 'UNREVIEWED'}</div>
+                    <strong>#${match.ranking} ${match.contractor_name || 'Unknown contractor'}</strong>
+                    <div class="project-meta">${match.match_score != null ? 'Score ' + match.match_score.toFixed(2) : 'Score unknown'} • ${escapeHtml(match.confidence || 'Unknown')} • ${escapeHtml(match.review_status || 'UNREVIEWED')}</div>
                   </div>
                   <span class="badge ${statusBadge(match.review_status)}">${match.review_status || 'UNREVIEWED'}</span>
                 </div>
@@ -118,7 +118,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
               <div class="evidence">
                 <div>
                   <div class="section-title">Project</div>
-                  <div>${escapeHtml(escapeHtml(project.name || 'Unknown project'))} • ${escapeHtml(escapeHtml(project.city || 'Unknown'))}${, escapeHtml(project.state) : ''}</div>
+                  <div>${project.name || 'Unknown project'} • ${project.city || 'Unknown'}${project.state ? ', ' + project.state : ''}</div>
                 </div>
                 <div>
                   <div class="section-title">Contractor</div>
@@ -126,7 +126,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                 </div>
                 <div>
                   <div class="section-title">Match</div>
-                  <div>Score: ${Number(selectedMatch.match_score ?? 0)}</div>
+                  <div>Score: ${selectedMatch.match_score}</div>
                   <div>Confidence: ${escapeHtml(selectedMatch.confidence || 'Unknown')}</div>
                   <div>Ranking: ${selectedMatch.ranking}</div>
                   <div>Matcher: ${escapeHtml(selectedMatch.matcher_version || 'Unknown')}</div>
@@ -134,19 +134,19 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                 </div>
                 <div>
                   <div class="section-title">Positive Factors</div>
-                  <div>${((selectedMatch.positive_factors || []).map(escapeHtml)).length ? selectedMatch.positive_factors.join('<br>') : 'None'}</div>
+                  <div>${(selectedMatch.positive_factors || []).length ? selectedMatch.positive_factors.join('<br>') : 'None'}</div>
                 </div>
                 <div>
                   <div class="section-title">Negative Factors</div>
-                  <div>${((selectedMatch.negative_factors || []).map(escapeHtml)).length ? selectedMatch.negative_factors.join('<br>') : 'None'}</div>
+                  <div>${(selectedMatch.negative_factors || []).length ? selectedMatch.negative_factors.join('<br>') : 'None'}</div>
                 </div>
                 <div>
                   <div class="section-title">Unknown Factors</div>
-                  <div>${((selectedMatch.unknown_factors || []).map(escapeHtml)).length ? selectedMatch.unknown_factors.join('<br>') : 'None'}</div>
+                  <div>${(selectedMatch.unknown_factors || []).length ? selectedMatch.unknown_factors.join('<br>') : 'None'}</div>
                 </div>
                 <div>
                   <div class="section-title">Outreach Draft</div>
-                  ${escapeHtml(selectedMatch.review_status) !== 'APPROVED'
+                  ${selectedMatch.review_status !== 'APPROVED'
                     ? '<div class="muted">Approve this match to generate an outreach draft.</div>'
                     : state.outreachDrafts[selectedMatch.id]?.error
                       ? '<div class="error">' + state.outreachDrafts[selectedMatch.id].error + '</div>'
@@ -173,7 +173,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
           const response = await fetch('/opportunities?limit=100&active_only=true&construction_only=true');
           if (!response.ok) throw new Error('Unable to load projects');
           const projects = await response.json();
-          state.projects = projects.map(project => ({...project, match_count: project.match_count ?? 0}));
+          state.projects = projects.map(project => ({ ...project, match_count: project.match_count ?? 0 }));
           if (!state.selectedProjectId && projects.length) {
             selectProject(projects[0].id);
           }
