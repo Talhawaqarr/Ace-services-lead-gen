@@ -31,7 +31,7 @@ def build_outreach_draft(session: Session, match_id: str, actor: str = "local-de
     match_uuid = _coerce_uuid(match_id, "match_id")
     match = session.get(MatchRecord, match_uuid)
     if match is None:
-        raise ValueError(f"Match not found: {match_id}")
+        raise LookupError(f"Match not found: {match_id}")
     if match.review_status != "APPROVED":
         raise ValueError("Match must be APPROVED before an outreach draft can be generated")
 
