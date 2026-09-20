@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from src.config import get_settings
 from src.db import SessionLocal
 from src.ingestion.service import ingest_source_records
-from src.models.core import Contractor, IngestionRun, MatchRecord, Project, RawProject
+from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, Project, RawProject
 from src.providers.samgov import SAMGovProvider
 from src.providers.usaspending import USASpendingProvider
 from src.pipeline.service import _project_payload, discover_contractors, run_local_fixture_pipeline
@@ -395,6 +395,39 @@ def get_match_detail(match_id: str) -> dict[str, Any]:
             },
         }
 
+
+
+
+@app.get("/matches/{match_id}/reviews", response_model=list[dict[str, Any]])
+def list_match_reviews(match_id: str) -> list[dict[str, Any]]:
+    with SessionLocal() as session:
+        try:
+            normalized = str(uuid.UUID(match_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid match id") from exc
+
+        row = session.get(MatchRecord, uuid.UUID(normalized))
+        if row is None:
+            raise HTTPException(status_code=404, detail="Match not found")
+
+        audits = session.execute(
+            select(MatchReviewAudit)
+            .where(MatchReviewAudit.match_id == row.id)
+            .order_by(MatchReviewAudit.created_at.asc(), MatchReviewAudit.id.asc())
+        ).scalars().all()
+
+        return [
+            {
+                "id": str(audit.id),
+                "match_id": str(audit.match_id),
+                "previous_status": audit.previous_status,
+                "new_status": audit.new_status,
+                "actor": audit.actor,
+                "source": audit.source,
+                "created_at": audit.created_at.isoformat() if audit.created_at else None,
+            }
+            for audit in audits
+        ]
 
 @app.post("/matches/{match_id}/review", response_model=dict[str, Any])
 def review_match(match_id: str, payload: ReviewRequest) -> dict[str, Any]:
