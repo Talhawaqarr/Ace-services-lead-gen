@@ -415,31 +415,29 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
         canonical = session.execute(select(Project).where(Project.source == source, Project.source_id == source_id)).scalar_one_or_none()
         if canonical is not None:
             existing.status = "DUPLICATE"
+            existing.fetched_at = datetime.now(timezone.utc)
+            existing.raw_payload = raw
+            existing.error_detail = None
             summary.duplicates += 1
-            if canonical.name is None and normalized.get("name"):
-                canonical.name = normalized["name"]
-            if canonical.city is None and normalized.get("city"):
-                canonical.city = normalized["city"]
-            if canonical.state is None and normalized.get("state"):
-                canonical.state = normalized["state"]
-            if canonical.bid_date is None and normalized.get("bid_date"):
-                canonical.bid_date = normalized["bid_date"]
-            if canonical.posted_date is None and normalized.get("posted_date"):
-                canonical.posted_date = normalized["posted_date"]
-            if canonical.response_deadline is None and normalized.get("response_deadline"):
-                canonical.response_deadline = normalized["response_deadline"]
-            if canonical.status is None and normalized.get("status"):
-                canonical.status = normalized["status"]
-            if canonical.description is None and normalized.get("description"):
-                canonical.description = normalized["description"]
-            if canonical.source_url is None and normalized.get("source_url"):
-                canonical.source_url = normalized["source_url"]
-            if canonical.estimated_value is None and normalized.get("estimated_value") is not None:
-                canonical.estimated_value = normalized["estimated_value"]
-            if canonical.trades in (None, []) and normalized.get("trades"):
-                canonical.trades = normalized["trades"]
-            if canonical.provenance is None:
-                canonical.provenance = normalized.get("provenance")
+
+            # Source-derived fields are mutable. A notice can be amended after
+            # first ingestion, so refresh them on subsequent syncs rather than
+            # freezing the first observed version in the canonical record.
+            canonical.name = normalized["name"]
+            canonical.city = normalized.get("city")
+            canonical.state = normalized.get("state")
+            canonical.latitude = normalized.get("latitude")
+            canonical.longitude = normalized.get("longitude")
+            canonical.trades = normalized.get("trades")
+            canonical.bid_date = normalized.get("bid_date")
+            canonical.posted_date = normalized.get("posted_date")
+            canonical.response_deadline = normalized.get("response_deadline")
+            canonical.status = normalized.get("status")
+            canonical.description = normalized.get("description")
+            canonical.source_url = normalized.get("source_url")
+            canonical.estimated_value = normalized.get("estimated_value")
+            canonical.provenance = normalized.get("provenance")
+            summary.updated += 1
             session.flush()
             continue
 
