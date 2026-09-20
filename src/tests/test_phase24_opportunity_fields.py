@@ -41,7 +41,7 @@ def test_ingestion_promotes_operational_opportunity_fields():
         project = session.query(Project).filter(Project.source == "phase24").one()
         assert project.posted_date == "2026-09-20T10:00:00Z"
         assert project.response_deadline == "2026-10-20T17:00:00Z"
-        assert project.status == "True"
+        assert project.status == "ACTIVE"
         assert project.description == "Test opportunity description."
         assert project.source_url == "https://example.test/opportunity"
     finally:
