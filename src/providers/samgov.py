@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.providers.contracts import OpportunityProvider
+
 
 class SAMGovProvider:
     """Local, deterministic SAM.gov-shaped opportunity provider.
