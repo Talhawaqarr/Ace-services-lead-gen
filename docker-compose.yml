@@ -19,7 +19,8 @@ services:
       APP_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@db:5432/ace_dev
       REDIS_URL: redis://localhost:6379/0
-      INGESTION_MODE: fixture
+      INGESTION_MODE: ${INGESTION_MODE:-fixture}
+      SAMGOV_API_KEY: ${SAMGOV_API_KEY:-}
       EMAIL_PROVIDER: mock
       LLM_PROVIDER: mock
       DRY_RUN: "true"
