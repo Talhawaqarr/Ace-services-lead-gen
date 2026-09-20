@@ -100,6 +100,8 @@ class Contractor(Base, TimestampMixin):
     state = Column(String(2))
     trades = Column(JSON)
     primary_email = Column(String)
+    primary_phone = Column(String)
+    website = Column(String)
     provenance = Column(JSON)
 
     __table_args__ = (
