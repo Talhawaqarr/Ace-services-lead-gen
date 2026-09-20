@@ -412,7 +412,6 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
             session.flush()
             continue
 
-        normalized, error = _project_record_for(raw)
         canonical = session.execute(select(Project).where(Project.source == source, Project.source_id == source_id)).scalar_one_or_none()
         if canonical is not None:
             existing.status = "DUPLICATE"
