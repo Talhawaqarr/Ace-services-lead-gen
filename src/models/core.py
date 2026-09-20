@@ -73,6 +73,11 @@ class Project(Base, TimestampMixin):
     longitude = Column(Float)
     trades = Column(JSON)
     bid_date = Column(String)
+    posted_date = Column(String)
+    response_deadline = Column(String)
+    status = Column(String)
+    description = Column(String)
+    source_url = Column(String)
     estimated_value = Column(Float)
     provenance = Column(JSON)
 
