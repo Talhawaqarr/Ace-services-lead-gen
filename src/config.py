@@ -22,6 +22,7 @@ class Settings:
     llm_provider: str
     dry_run: bool
     samgov_api_key: str | None = field(default=None, repr=False)
+    api_auth_token: str | None = field(default=None, repr=False)
     max_emails_per_hour: int = 100
 
     @property
@@ -39,6 +40,8 @@ class Settings:
             raise ValueError("DRY_RUN=true is not allowed when APP_ENV=production")
         if self.is_production and self.email_provider == "mock":
             raise ValueError("EMAIL_PROVIDER=mock is not allowed when APP_ENV=production")
+        if self.is_production and not self.api_auth_token:
+            raise ValueError("API_AUTH_TOKEN must be configured when APP_ENV=production")
 
 
 @lru_cache(maxsize=1)
@@ -52,6 +55,7 @@ def get_settings() -> Settings:
         llm_provider=os.getenv("LLM_PROVIDER", "mock").strip().lower(),
         dry_run=_env_bool("DRY_RUN", True),
         samgov_api_key=os.getenv("SAMGOV_API_KEY") or None,
+        api_auth_token=os.getenv("API_AUTH_TOKEN") or None,
         max_emails_per_hour=int(os.getenv("MAX_EMAILS_PER_HOUR", "100")),
     )
     settings.validate()
