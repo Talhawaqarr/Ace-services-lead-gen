@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from src.ingestion.service import ingest_contractors, ingest_source_records
 from src.models.core import Contractor, Project
+from src.opportunity.service import qualifies_opportunity
 from src.providers.samgov import SAMGovProvider
 from src.providers.samgov_contractors import SAMGovContractorProvider
 from src.review.service import generate_matches
@@ -101,6 +102,58 @@ def run_local_fixture_pipeline(
         "opportunities": opportunity_summary,
         "contractors": contractor_summary,
         "projects_discovered": len(projects),
+        "projects_processed": projects_processed,
+        "matches_generated": generated,
+    }
+
+
+def run_qualified_fixture_pipeline(
+    session: Session,
+    opportunity_provider: Any | None = None,
+    contractor_provider: Any | None = None,
+    *,
+    deadline_within_days: int | None = None,
+) -> dict[str, Any]:
+    """Run the offline pipeline only for opportunities that pass qualification."""
+    opportunity_provider = opportunity_provider or SAMGovProvider()
+    contractor_provider = contractor_provider or SAMGovContractorProvider()
+
+    opportunity_summary = ingest_source_records(
+        session, opportunity_provider, source_name="samgov"
+    )
+    contractor_summary = ingest_contractors(
+        session, contractor_provider, source_name="samgov"
+    )
+
+    projects = session.execute(
+        select(Project)
+        .where(Project.source == "samgov")
+        .order_by(Project.response_deadline.asc().nullslast(), Project.name.asc())
+    ).scalars().all()
+
+    qualified = [
+        project
+        for project in projects
+        if qualifies_opportunity(project, deadline_within_days=deadline_within_days)
+    ]
+
+    generated = 0
+    projects_processed = 0
+    for project in qualified:
+        candidates = discover_contractors(session, project, source="samgov")
+        if not candidates:
+            continue
+        matches = generate_matches(session, _project_payload(project), candidates)
+        generated += len(matches)
+        projects_processed += 1
+
+    session.flush()
+
+    return {
+        "opportunities": opportunity_summary,
+        "contractors": contractor_summary,
+        "projects_discovered": len(projects),
+        "qualified_projects": len(qualified),
         "projects_processed": projects_processed,
         "matches_generated": generated,
     }
