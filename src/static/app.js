@@ -191,7 +191,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                   ${state.outreachDrafts[selectedMatch.id]?.status === 'APPROVED'
                     ? state.outreachQueue[state.outreachDrafts[selectedMatch.id].id]
                       ? '<div class="success">Queued safely — <strong>NOT SENT</strong>.</div>'
-                      : '<button class="secondary" onclick="queueOutreachDraft(\\'' + state.outreachDrafts[selectedMatch.id].id + '\\', \\' + selectedMatch.id + '\\')">Queue outreach (not sent)</button>'
+                      : '<button class="secondary" onclick="queueOutreachDraft(\'' + state.outreachDrafts[selectedMatch.id].id + '\', \'' + selectedMatch.id + '\')">Queue outreach (not sent)</button>'
                     : '<div class="muted">Approve the outreach draft before queueing.</div>'}
                 </div>
                 <div>
