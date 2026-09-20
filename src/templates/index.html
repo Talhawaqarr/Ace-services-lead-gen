@@ -74,6 +74,7 @@
         matchLimit: 10,
         matchOffset: 0,
         matchStatus: '',
+        reviewAudits: {},
         message: null,
       };
 
@@ -208,6 +209,12 @@
                   <div class="section-title">Unknown Factors</div>
                   <div>${(selectedMatch.unknown_factors || []).length ? selectedMatch.unknown_factors.join('<br>') : 'None'}</div>
                 </div>
+                <div>
+                  <div class="section-title">Review History</div>
+                  <div id="reviewHistory">
+                    ${state.reviewAudits[selectedMatch.id]?.error ? `<div class="error">${state.reviewAudits[selectedMatch.id].error}</div>` : state.reviewAudits[selectedMatch.id] ? (state.reviewAudits[selectedMatch.id].length ? state.reviewAudits[selectedMatch.id].map(audit => `<div class="match-card"><strong>${audit.previous_status || 'UNREVIEWED'} → ${audit.new_status}</strong><div class="project-meta">Actor: ${audit.actor || 'Unknown'} • Source: ${audit.source || 'Unknown'} • ${audit.created_at || 'Unknown time'}</div></div>`).join('') : '<div class="muted">No review history yet.</div>') : '<div class="muted">Loading review history...</div>'}
+                  </div>
+                </div>
               </div>
             </div>
           ` : ''}
@@ -281,9 +288,22 @@
         await refreshProjectMatches();
       }
 
+      async function loadMatchReviews(matchId) {
+        try {
+          const response = await fetch(`/matches/${matchId}/reviews`);
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.detail || 'Unable to load review history');
+          state.reviewAudits[matchId] = body;
+        } catch (error) {
+          state.reviewAudits[matchId] = { error: error.message };
+        }
+        renderWorkspace();
+      }
+
       function openMatch(matchId) {
         state.selectedMatchId = matchId;
         renderWorkspace();
+        loadMatchReviews(matchId);
       }
 
       async function reviewMatch(matchId, status) {
