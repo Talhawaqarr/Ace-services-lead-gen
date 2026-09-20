@@ -221,10 +221,10 @@
           const response = await fetch('/projects');
           if (!response.ok) throw new Error('Unable to load projects');
           const projects = await response.json();
-        state.projects = projects;
-        if (!state.selectedProjectId && projects.length) {
-          selectProject(projects[0].id);
-        }
+          state.projects = projects;
+          if (!state.selectedProjectId && projects.length) {
+            selectProject(projects[0].id);
+          }
           renderProjects();
         } catch (error) {
           state.message = { type: 'error', text: error.message };
