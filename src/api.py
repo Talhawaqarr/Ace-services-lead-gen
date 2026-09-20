@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from src.config import get_settings
@@ -24,8 +24,8 @@ from src.observability import configure_logging, request_logging_middleware
 
 configure_logging()
 app = FastAPI(title="ACE Services Review API", version="0.6.0")
-app.middleware("http")(request_logging_middleware)
 app.middleware("http")(api_auth_middleware)
+app.middleware("http")(request_logging_middleware)
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 
 
@@ -124,25 +124,32 @@ def readiness_check() -> dict[str, str]:
 @app.get("/projects", response_model=list[ProjectSummary])
 def list_projects(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)) -> list[ProjectSummary]:
     with SessionLocal() as session:
-        rows = session.execute(select(Project).order_by(Project.name.asc()).offset(offset).limit(limit)).scalars().all()
-        items: list[ProjectSummary] = []
-        for row in rows:
-            items.append(
-                ProjectSummary(
-                    id=str(row.id),
-                    name=row.name,
-                    source=row.source,
-                    source_id=row.source_id,
-                    city=row.city,
-                    state=row.state,
-                    bid_date=row.bid_date,
-                    estimated_value=row.estimated_value,
-                    match_count=session.execute(
-                        select(MatchRecord).where(MatchRecord.project_id == row.id)
-                    ).scalars().all().__len__(),
-                )
+        match_count = (
+            select(func.count(MatchRecord.id))
+            .where(MatchRecord.project_id == Project.id)
+            .correlate(Project)
+            .scalar_subquery()
+        )
+        rows = session.execute(
+            select(Project, match_count.label("match_count"))
+            .order_by(Project.name.asc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        return [
+            ProjectSummary(
+                id=str(row.id),
+                name=row.name,
+                source=row.source,
+                source_id=row.source_id,
+                city=row.city,
+                state=row.state,
+                bid_date=row.bid_date,
+                estimated_value=row.estimated_value,
+                match_count=int(match_count_value),
             )
-        return items
+            for row, match_count_value in rows
+        ]
 
 
 
@@ -207,19 +214,22 @@ def get_project_matches(project_id: str) -> ProjectWithMatches:
             raise HTTPException(status_code=404, detail="Project not found")
 
         rows = session.execute(
-            select(MatchRecord).where(MatchRecord.project_id == uuid.UUID(normalized)).order_by(MatchRecord.ranking.asc())
-        ).scalars().all()
+            select(MatchRecord, Contractor)
+            .join(Contractor, Contractor.id == MatchRecord.contractor_id)
+            .where(MatchRecord.project_id == uuid.UUID(normalized))
+            .order_by(MatchRecord.ranking.asc())
+        ).all()
 
         summary = {"total": len(rows), "unreviewed": 0, "approved": 0, "rejected": 0, "skipped": 0}
         match_items: list[MatchItem] = []
-        for row in rows:
+        for row, contractor in rows:
             summary[row.review_status.lower() if row.review_status.lower() in {"approved", "rejected", "skipped"} else "unreviewed"] += 1
             match_items.append(
                 MatchItem(
                     id=str(row.id),
                     project_id=str(row.project_id),
                     contractor_id=str(row.contractor_id),
-                    contractor_name=(session.get(Contractor, row.contractor_id).company_name if session.get(Contractor, row.contractor_id) else "Unknown contractor"),
+                    contractor_name=contractor.company_name,
                     ranking=row.ranking,
                     match_score=float(row.match_score),
                     confidence=row.confidence,
