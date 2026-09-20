@@ -1,3 +1,5 @@
+import pytest
+
 from src.db import get_session
 from src.models.core import (
     Contractor,
@@ -12,6 +14,15 @@ from src.pipeline.service import run_local_fixture_pipeline
 from src.review.service import set_review_status
 
 
+@pytest.fixture
+def session():
+    db = get_session()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 def _reset_phase12(session):
     session.query(MatchReviewAudit).delete(synchronize_session=False)
     session.query(MatchRecord).delete(synchronize_session=False)
@@ -23,8 +34,7 @@ def _reset_phase12(session):
     session.commit()
 
 
-def test_phase12_complete_offline_pipeline_reaches_persisted_matches_and_review():
-    session = get_session()
+def test_phase12_complete_offline_pipeline_reaches_persisted_matches_and_review(session):
     _reset_phase12(session)
 
     result = run_local_fixture_pipeline(session)
@@ -73,8 +83,7 @@ def test_phase12_complete_offline_pipeline_reaches_persisted_matches_and_review(
     assert audit.actor == "phase12-test"
 
 
-def test_phase12_rerun_is_idempotent_for_projects_contractors_and_matches():
-    session = get_session()
+def test_phase12_rerun_is_idempotent_for_projects_contractors_and_matches(session):
     _reset_phase12(session)
 
     first = run_local_fixture_pipeline(session)
@@ -93,8 +102,7 @@ def test_phase12_rerun_is_idempotent_for_projects_contractors_and_matches():
     assert session.query(MatchRecord).count() == first_matches
 
 
-def test_phase12_discovery_does_not_rank_or_score_candidates():
-    session = get_session()
+def test_phase12_discovery_does_not_rank_or_score_candidates(session):
     _reset_phase12(session)
 
     result = run_local_fixture_pipeline(session)
@@ -109,8 +117,7 @@ def test_phase12_discovery_does_not_rank_or_score_candidates():
     assert all("ranking" not in candidate for candidate in candidates)
 
 
-def test_phase12_pipeline_is_fixture_only_by_default():
-    session = get_session()
+def test_phase12_pipeline_is_fixture_only_by_default(session):
     _reset_phase12(session)
 
     result = run_local_fixture_pipeline(session)
@@ -119,8 +126,7 @@ def test_phase12_pipeline_is_fixture_only_by_default():
     assert result["contractors"]["source"] == "samgov"
 
 
-def test_phase12_api_exposes_local_pipeline_endpoint():
-    session = get_session()
+def test_phase12_api_exposes_local_pipeline_endpoint(session):
     _reset_phase12(session)
 
     from fastapi.testclient import TestClient
