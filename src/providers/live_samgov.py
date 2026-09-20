@@ -177,11 +177,11 @@ class LiveSAMGovProvider(OpportunityProvider):
         next_token = first["next_page_token"]
         pages_fetched = 1
 
+        truncated = False
         while next_token is not None:
             if pages_fetched >= self.max_pages:
-                raise RuntimeError(
-                    f"SAM.gov pagination exceeded max_pages={self.max_pages}"
-                )
+                truncated = True
+                break
             page = self._list_page(filters, next_token)
             projects.extend(page["projects"])
             next_token = page["next_page_token"]
@@ -189,6 +189,7 @@ class LiveSAMGovProvider(OpportunityProvider):
 
         meta["pages_fetched"] = pages_fetched
         meta["records_returned"] = len(projects)
+        meta["pagination_truncated"] = truncated
         return {
             "projects": projects,
             "next_page_token": None,
