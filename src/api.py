@@ -89,6 +89,9 @@ class ProjectWithMatches(BaseModel):
     project: dict[str, Any]
     matches: list[MatchItem]
     summary: dict[str, int]
+    total: int
+    limit: int
+    offset: int
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -248,7 +251,12 @@ def get_project(project_id: str) -> dict[str, Any]:
 
 
 @app.get("/projects/{project_id}/matches", response_model=ProjectWithMatches)
-def get_project_matches(project_id: str) -> ProjectWithMatches:
+def get_project_matches(
+    project_id: str,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    review_status: str | None = Query(default=None),
+) -> ProjectWithMatches:
     with SessionLocal() as session:
         try:
             normalized = str(uuid.UUID(project_id))
@@ -259,17 +267,41 @@ def get_project_matches(project_id: str) -> ProjectWithMatches:
         if project_row is None:
             raise HTTPException(status_code=404, detail="Project not found")
 
+        normalized_status = review_status.upper() if review_status else None
+        valid_statuses = {"UNREVIEWED", "APPROVED", "REJECTED", "SKIPPED"}
+        if normalized_status is not None and normalized_status not in valid_statuses:
+            raise HTTPException(status_code=400, detail="Invalid review status")
+
+        base_filters = [MatchRecord.project_id == uuid.UUID(normalized)]
+        if normalized_status:
+            base_filters.append(MatchRecord.review_status == normalized_status)
+
+        total = session.execute(
+            select(func.count(MatchRecord.id)).where(*base_filters)
+        ).scalar_one()
+
+        status_rows = session.execute(
+            select(MatchRecord.review_status, func.count(MatchRecord.id))
+            .where(MatchRecord.project_id == uuid.UUID(normalized))
+            .group_by(MatchRecord.review_status)
+        ).all()
+        summary = {"total": 0, "unreviewed": 0, "approved": 0, "rejected": 0, "skipped": 0}
+        for status, count in status_rows:
+            key = status.lower() if status and status.lower() in {"approved", "rejected", "skipped"} else "unreviewed"
+            summary[key] += int(count)
+            summary["total"] += int(count)
+
         rows = session.execute(
             select(MatchRecord, Contractor)
             .join(Contractor, Contractor.id == MatchRecord.contractor_id)
-            .where(MatchRecord.project_id == uuid.UUID(normalized))
-            .order_by(MatchRecord.ranking.asc())
+            .where(*base_filters)
+            .order_by(MatchRecord.ranking.asc(), MatchRecord.id.asc())
+            .offset(offset)
+            .limit(limit)
         ).all()
 
-        summary = {"total": len(rows), "unreviewed": 0, "approved": 0, "rejected": 0, "skipped": 0}
         match_items: list[MatchItem] = []
         for row, contractor in rows:
-            summary[row.review_status.lower() if row.review_status.lower() in {"approved", "rejected", "skipped"} else "unreviewed"] += 1
             match_items.append(
                 MatchItem(
                     id=str(row.id),
@@ -306,6 +338,9 @@ def get_project_matches(project_id: str) -> ProjectWithMatches:
             },
             matches=match_items,
             summary=summary,
+            total=int(total),
+            limit=limit,
+            offset=offset,
         )
 
 
