@@ -49,3 +49,7 @@
       .pagination { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:14px; }
       button:disabled { opacity:.5; cursor:not-allowed; }
       .project-description { color:var(--muted); margin-top:10px; line-height:1.45; }
+
+
+      .demo-panel { display:flex; flex-wrap:wrap; justify-content:space-between; gap:14px; align-items:center; margin-top:16px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:#fff; }
+      .demo-panel .actions { align-items:center; margin-top:0; }
