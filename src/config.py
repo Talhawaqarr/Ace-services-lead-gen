@@ -32,8 +32,10 @@ class Settings:
     def validate(self) -> None:
         if self.app_env not in {"development", "test", "staging", "production"}:
             raise ValueError("APP_ENV must be development, test, staging, or production")
-        if self.ingestion_mode not in {"fixture"}:
-            raise ValueError("INGESTION_MODE must be fixture until a live provider is explicitly implemented")
+        if self.ingestion_mode not in {"fixture", "samgov"}:
+            raise ValueError("INGESTION_MODE must be fixture or samgov")
+        if self.ingestion_mode == "samgov" and not self.samgov_api_key:
+            raise ValueError("SAMGOV_API_KEY must be configured when INGESTION_MODE=samgov")
         if self.max_emails_per_hour < 0:
             raise ValueError("MAX_EMAILS_PER_HOUR must be >= 0")
         if self.is_production and self.dry_run:
