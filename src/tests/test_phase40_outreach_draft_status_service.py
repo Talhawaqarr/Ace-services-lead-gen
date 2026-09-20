@@ -16,7 +16,7 @@ def make_session(draft):
 
 def test_approve_draft_records_audit_metadata():
     draft = SimpleNamespace(
-        id="draft-1",
+        id="11111111-1111-1111-1111-111111111111",
         status="DRAFT",
         approved_at=None,
         approved_by=None,
@@ -26,7 +26,7 @@ def test_approve_draft_records_audit_metadata():
 
     updated = set_outreach_draft_status(
         session,
-        "draft-1",
+        "11111111-1111-1111-1111-111111111111",
         "APPROVED",
         actor="reviewer-1",
         source="review-workspace",
@@ -44,7 +44,7 @@ def test_approve_draft_records_audit_metadata():
 
 def test_same_status_is_idempotent_without_audit():
     draft = SimpleNamespace(
-        id="draft-1",
+        id="11111111-1111-1111-1111-111111111111",
         status="APPROVED",
         approved_at="existing",
         approved_by="reviewer-1",
@@ -52,7 +52,7 @@ def test_same_status_is_idempotent_without_audit():
     )
     session = make_session(draft)
 
-    updated = set_outreach_draft_status(session, "draft-1", "APPROVED")
+    updated = set_outreach_draft_status(session, "11111111-1111-1111-1111-111111111111", "APPROVED")
 
     assert updated is draft
     session.add.assert_not_called()
@@ -61,7 +61,7 @@ def test_same_status_is_idempotent_without_audit():
 
 def test_invalid_draft_transition_is_rejected():
     draft = SimpleNamespace(
-        id="draft-1",
+        id="11111111-1111-1111-1111-111111111111",
         status="DRAFT",
         approved_at=None,
         approved_by=None,
@@ -70,7 +70,7 @@ def test_invalid_draft_transition_is_rejected():
     session = make_session(draft)
 
     with pytest.raises(ValueError, match="Invalid outreach draft transition"):
-        set_outreach_draft_status(session, "draft-1", "DRAFT")
+        set_outreach_draft_status(session, "11111111-1111-1111-1111-111111111111", "DRAFT")
 
     session.add.assert_not_called()
     session.flush.assert_not_called()
