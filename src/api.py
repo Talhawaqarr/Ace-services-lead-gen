@@ -19,7 +19,7 @@ from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAu
 from src.providers.samgov import SAMGovProvider
 from src.providers.live_samgov import LiveSAMGovProvider, SAMGovRateLimitError
 from src.providers.usaspending import USASpendingProvider
-from src.pipeline.service import _project_payload, discover_contractors, run_local_fixture_pipeline
+from src.pipeline.service import _project_payload, discover_contractors, run_qualified_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
@@ -659,7 +659,7 @@ def generate_project_matches(project_id: str) -> dict[str, Any]:
 @app.post("/pipeline/local/run")
 def run_local_pipeline() -> dict[str, Any]:
     with SessionLocal() as session:
-        summary = run_local_fixture_pipeline(session)
+        summary = run_qualified_fixture_pipeline(session)
         session.commit()
         return summary
 
