@@ -71,6 +71,9 @@
         selectedProjectId: null,
         projectMatches: null,
         selectedMatchId: null,
+        matchLimit: 10,
+        matchOffset: 0,
+        matchStatus: '',
         message: null,
       };
 
@@ -115,6 +118,9 @@
         const project = state.projectMatches.project;
         const matches = state.projectMatches.matches || [];
         const summary = state.projectMatches.summary || { total: 0, unreviewed: 0, approved: 0, rejected: 0, skipped: 0 };
+        const pageTotal = state.projectMatches.total ?? 0;
+        const pageStart = pageTotal ? state.projectMatches.offset + 1 : 0;
+        const pageEnd = Math.min(state.projectMatches.offset + matches.length, pageTotal);
 
         const selectedMatch = matches.find(m => m.id === state.selectedMatchId) || null;
 
@@ -136,6 +142,19 @@
           </div>
 
           ${state.message ? `<div class="${state.message.type}">${state.message.text}</div>` : ''}
+
+          <div class="actions">
+            <select id="matchStatusFilter" class="secondary" onchange="changeMatchStatus(this.value)">
+              <option value="">All statuses</option>
+              <option value="UNREVIEWED" ${state.matchStatus === 'UNREVIEWED' ? 'selected' : ''}>Unreviewed</option>
+              <option value="APPROVED" ${state.matchStatus === 'APPROVED' ? 'selected' : ''}>Approved</option>
+              <option value="REJECTED" ${state.matchStatus === 'REJECTED' ? 'selected' : ''}>Rejected</option>
+              <option value="SKIPPED" ${state.matchStatus === 'SKIPPED' ? 'selected' : ''}>Skipped</option>
+            </select>
+            <button class="secondary" onclick="previousMatchPage()" ${state.projectMatches.offset <= 0 ? 'disabled' : ''}>Previous</button>
+            <button class="secondary" onclick="nextMatchPage()" ${state.projectMatches.offset + matches.length >= pageTotal ? 'disabled' : ''}>Next</button>
+            <span class="muted">${pageStart}-${pageEnd} of ${pageTotal}</span>
+          </div>
 
           <div class="match-list">
             ${matches.length ? matches.map(match => `
@@ -210,7 +229,9 @@
       async function refreshProjectMatches() {
         if (!state.selectedProjectId) return;
         try {
-          const response = await fetch(`/projects/${state.selectedProjectId}/matches`);
+          const params = new URLSearchParams({ limit: String(state.matchLimit), offset: String(state.matchOffset) });
+          if (state.matchStatus) params.set('review_status', state.matchStatus);
+          const response = await fetch(`/projects/${state.selectedProjectId}/matches?${params.toString()}`);
           if (!response.ok) throw new Error('Unable to load matches');
           state.projectMatches = await response.json();
           if (state.projectMatches.matches.length) {
@@ -225,8 +246,29 @@
         }
       }
 
+      function changeMatchStatus(status) {
+        state.matchStatus = status;
+        state.matchOffset = 0;
+        refreshProjectMatches();
+      }
+
+      function previousMatchPage() {
+        state.matchOffset = Math.max(0, state.matchOffset - state.matchLimit);
+        refreshProjectMatches();
+      }
+
+      function nextMatchPage() {
+        const total = state.projectMatches?.total ?? 0;
+        if (state.matchOffset + state.matchLimit < total) {
+          state.matchOffset += state.matchLimit;
+          refreshProjectMatches();
+        }
+      }
+
       async function selectProject(projectId) {
         state.selectedProjectId = projectId;
+        state.matchOffset = 0;
+        state.matchStatus = '';
         state.message = null;
         renderProjects();
         await refreshProjectMatches();
