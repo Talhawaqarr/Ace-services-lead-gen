@@ -75,6 +75,7 @@
         matchOffset: 0,
         matchStatus: '',
         reviewAudits: {},
+        outreachDrafts: {},
         message: null,
       };
 
@@ -210,6 +211,16 @@
                   <div>${(selectedMatch.unknown_factors || []).length ? selectedMatch.unknown_factors.join('<br>') : 'None'}</div>
                 </div>
                 <div>
+                  <div class="section-title">Outreach Draft</div>
+                  ${selectedMatch.review_status !== 'APPROVED'
+                    ? '<div class="muted">Approve this match to generate an outreach draft.</div>'
+                    : state.outreachDrafts[selectedMatch.id]?.error
+                      ? '<div class="error">' + state.outreachDrafts[selectedMatch.id].error + '</div>'
+                      : state.outreachDrafts[selectedMatch.id]
+                        ? '<div class="match-card"><div class="project-meta">Status: ' + state.outreachDrafts[selectedMatch.id].status + ' • To: ' + state.outreachDrafts[selectedMatch.id].recipient_email + '</div><strong>' + state.outreachDrafts[selectedMatch.id].subject + '</strong><pre style="white-space: pre-wrap; font-family: inherit; margin-bottom: 0;">' + state.outreachDrafts[selectedMatch.id].body + '</pre></div>'
+                        : '<button class="secondary" onclick="generateOutreachDraft(\'' + selectedMatch.id + '\')">Generate Outreach Draft</button>'}
+                </div>
+                <div>
                   <div class="section-title">Review History</div>
                   <div id="reviewHistory">
                     ${state.reviewAudits[selectedMatch.id]?.error ? `<div class="error">${state.reviewAudits[selectedMatch.id].error}</div>` : state.reviewAudits[selectedMatch.id] ? (state.reviewAudits[selectedMatch.id].length ? state.reviewAudits[selectedMatch.id].map(audit => `<div class="match-card"><strong>${audit.previous_status || 'UNREVIEWED'} → ${audit.new_status}</strong><div class="project-meta">Actor: ${audit.actor || 'Unknown'} • Source: ${audit.source || 'Unknown'} • ${audit.created_at || 'Unknown time'}</div></div>`).join('') : '<div class="muted">No review history yet.</div>') : '<div class="muted">Loading review history...</div>'}
@@ -288,6 +299,35 @@
         await refreshProjectMatches();
       }
 
+      async function loadOutreachDraft(matchId) {
+        try {
+          const response = await fetch('/matches/' + matchId + '/outreach-draft');
+          if (response.status === 404) {
+            state.outreachDrafts[matchId] = null;
+          } else {
+            const body = await response.json();
+            if (!response.ok) throw new Error(body.detail || 'Unable to load outreach draft');
+            state.outreachDrafts[matchId] = body;
+          }
+        } catch (error) {
+          state.outreachDrafts[matchId] = { error: error.message };
+        }
+        renderWorkspace();
+      }
+
+      async function generateOutreachDraft(matchId) {
+        try {
+          const response = await fetch('/matches/' + matchId + '/outreach-draft', { method: 'POST' });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.detail || 'Unable to generate outreach draft');
+          state.outreachDrafts[matchId] = body;
+          state.message = { type: 'success', text: 'Outreach draft generated.' };
+          renderWorkspace();
+        } catch (error) {
+          state.message = { type: 'error', text: error.message };
+          renderWorkspace();
+        }
+      }
       async function loadMatchReviews(matchId) {
         try {
           const response = await fetch(`/matches/${matchId}/reviews`);
@@ -304,6 +344,7 @@
         state.selectedMatchId = matchId;
         renderWorkspace();
         loadMatchReviews(matchId);
+        loadOutreachDraft(matchId);
       }
 
       async function reviewMatch(matchId, status) {
