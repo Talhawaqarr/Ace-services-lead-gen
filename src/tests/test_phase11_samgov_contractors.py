@@ -5,11 +5,16 @@ from pathlib import Path
 from src.db import get_session
 from src.ingestion.service import ingest_contractors
 from src.matching.engine import match_project
-from src.models.core import Contractor, IngestionRun, RawContractor, RawProject
+from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, RawContractor, RawProject
 from src.providers.samgov_contractors import SAMGovContractorProvider
 
 
 def _reset_contractors(session):
+    contractor_ids = [row[0] for row in session.query(Contractor.id).filter(Contractor.source == "samgov").all()]
+    match_ids = [row[0] for row in session.query(MatchRecord.id).filter(MatchRecord.contractor_id.in_(contractor_ids)).all()] if contractor_ids else []
+    if match_ids:
+        session.query(MatchReviewAudit).filter(MatchReviewAudit.match_id.in_(match_ids)).delete(synchronize_session=False)
+        session.query(MatchRecord).filter(MatchRecord.id.in_(match_ids)).delete(synchronize_session=False)
     session.query(Contractor).filter(Contractor.source == "samgov").delete(synchronize_session=False)
     session.query(RawContractor).filter(RawContractor.source == "samgov").delete(synchronize_session=False)
     session.query(RawProject).filter(RawProject.source == "samgov").delete(synchronize_session=False)
