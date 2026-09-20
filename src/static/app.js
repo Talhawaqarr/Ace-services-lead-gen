@@ -10,6 +10,8 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         reviewAudits: {},
         outreachDrafts: {},
         outreachAudits: {},
+        outreachQueue: {},
+        demo: { status: 'idle', result: null },
         message: null,
         workspaceRequestId: 0,
       };
@@ -183,6 +185,14 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                       : state.outreachDrafts[selectedMatch.id]
                         ? '<div class="match-card"><div class="project-meta">Status: ' + escapeHtml(state.outreachDrafts[selectedMatch.id].status) + ' • To: ' + escapeHtml(state.outreachDrafts[selectedMatch.id].recipient_email) + '</div><strong>' + escapeHtml(state.outreachDrafts[selectedMatch.id].subject) + '</strong><pre style="white-space: pre-wrap; font-family: inherit; margin-bottom: 0;">' + escapeHtml(state.outreachDrafts[selectedMatch.id].body) + '</pre><div class="actions">' + (escapeHtml(state.outreachDrafts[selectedMatch.id].status) === 'DRAFT' ? '<button class="approve" onclick="updateOutreachDraftStatus(\'' + state.outreachDrafts[selectedMatch.id].id + '\', \'APPROVED\', \'' + selectedMatch.id + '\')">Approve Draft</button><button class="reject" onclick="updateOutreachDraftStatus(\'' + state.outreachDrafts[selectedMatch.id].id + '\', \'REJECTED\', \'' + selectedMatch.id + '\')">Reject Draft</button>' : escapeHtml(state.outreachDrafts[selectedMatch.id].status) === 'APPROVED' ? '<button class="reject" onclick="updateOutreachDraftStatus(\'' + state.outreachDrafts[selectedMatch.id].id + '\', \'REJECTED\', \'' + selectedMatch.id + '\')">Reject Draft</button>' : '<button class="approve" onclick="updateOutreachDraftStatus(\'' + state.outreachDrafts[selectedMatch.id].id + '\', \'APPROVED\', \'' + selectedMatch.id + '\')">Approve Draft</button>') + '</div></div>'
                         : '<button class="secondary" onclick="generateOutreachDraft(\'' + selectedMatch.id + '\')">Generate Outreach Draft</button>'}
+                </div>
+                <div>
+                  <div class="section-title">Delivery Queue</div>
+                  ${state.outreachDrafts[selectedMatch.id]?.status === 'APPROVED'
+                    ? state.outreachQueue[state.outreachDrafts[selectedMatch.id].id]
+                      ? '<div class="success">Queued safely — <strong>NOT SENT</strong>.</div>'
+                      : '<button class="secondary" onclick="queueOutreachDraft(\\'' + state.outreachDrafts[selectedMatch.id].id + '\\', \\' + selectedMatch.id + '\\')">Queue outreach (not sent)</button>'
+                    : '<div class="muted">Approve the outreach draft before queueing.</div>'}
                 </div>
                 <div>
                   <div class="section-title">Review History</div>
@@ -375,6 +385,48 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         } catch (error) {
           state.message = { type: 'error', text: error.message };
           renderWorkspace();
+        }
+      }
+
+
+      async function queueOutreachDraft(draftId, matchId) {
+        try {
+          const response = await fetch('/outreach-drafts/' + draftId + '/queue', { method: 'POST' });
+          const body = await readJson(response);
+          if (!response.ok) throw new Error(body.detail || 'Unable to queue outreach draft');
+          state.outreachQueue[draftId] = body;
+          state.message = { type: 'success', text: 'Outreach queued safely — NOT SENT.' };
+          renderWorkspace();
+        } catch (error) {
+          state.message = { type: 'error', text: error.message };
+          renderWorkspace();
+        }
+      }
+
+      async function runDemo() {
+        const status = document.getElementById('demoStatus');
+        if (status) status.textContent = 'Running one bounded live SAM.gov request…';
+        state.demo.status = 'running';
+        try {
+          const response = await fetch('/demo/run?keyword=36C26126Q1279&state=CA', { method: 'POST' });
+          const body = await readJson(response);
+          if (!response.ok) throw new Error(body.detail || 'Demo run failed');
+          state.demo = { status: 'complete', result: body };
+          if (status) {
+            const opp = body.opportunities || {};
+            status.textContent = 'Live sync complete: fetched ' + (opp.records_fetched ?? 0) +
+              ', accepted ' + (opp.accepted ?? 0) +
+              ', qualified ' + (body.qualified_projects ?? 0) +
+              ', matches ' + (body.matches_generated ?? 0) + '.';
+          }
+          await loadProjects();
+          if (body.matches_generated === 0) {
+            state.message = { type: 'warning', text: 'Live data arrived, but no contractor match was generated. Review the opportunity and candidate coverage.' };
+            renderWorkspace();
+          }
+        } catch (error) {
+          state.demo = { status: 'error', result: null };
+          if (status) status.textContent = 'Demo run failed: ' + error.message;
         }
       }
 
