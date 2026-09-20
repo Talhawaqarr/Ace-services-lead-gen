@@ -188,3 +188,21 @@ class OutreachDraftAudit(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_outreach_draft_audit_draft_id", "draft_id"),
     )
+
+
+class OutreachQueueItem(Base, TimestampMixin):
+    __tablename__ = "outreach_queue_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    draft_id = Column(UUID(as_uuid=True), ForeignKey("outreach_drafts.id"), nullable=False)
+    recipient_email = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    body = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="QUEUED")
+    queued_at = Column(DateTime, nullable=False, server_default=func.now())
+    provenance = Column(JSON, default=dict)
+
+    __table_args__ = (
+        UniqueConstraint("draft_id", name="uq_outreach_queue_items_draft_id"),
+        Index("ix_outreach_queue_items_status", "status"),
+    )

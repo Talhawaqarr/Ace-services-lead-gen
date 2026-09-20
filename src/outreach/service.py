@@ -7,7 +7,7 @@ from sqlalchemy import select
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from src.models.core import Contractor, MatchRecord, OutreachDraft, OutreachDraftAudit, Project
+from src.models.core import Contractor, MatchRecord, OutreachDraft, OutreachDraftAudit, OutreachQueueItem, Project
 
 TEMPLATE_VERSION = "deterministic-v1"
 
@@ -139,3 +139,37 @@ def list_outreach_draft_audits(session: Session, draft_id: str) -> list[Outreach
         .where(OutreachDraftAudit.draft_id == draft.id)
         .order_by(OutreachDraftAudit.created_at.asc(), OutreachDraftAudit.id.asc())
     ).scalars().all()
+
+
+
+def queue_approved_outreach(session: Session, draft_id: str, actor: str = "local-dev", source: str = "local-dev") -> OutreachQueueItem:
+    draft_uuid = _coerce_uuid(draft_id, "draft_id")
+    draft = session.get(OutreachDraft, draft_uuid)
+    if draft is None:
+        raise LookupError(f"Outreach draft not found: {draft_id}")
+    if draft.status != "APPROVED":
+        raise ValueError("Outreach draft must be APPROVED before it can be queued")
+
+    existing = session.execute(
+        select(OutreachQueueItem).where(OutreachQueueItem.draft_id == draft.id)
+    ).scalar_one_or_none()
+    if existing is not None:
+        return existing
+
+    item = OutreachQueueItem(
+        draft_id=draft.id,
+        recipient_email=draft.recipient_email,
+        subject=draft.subject,
+        body=draft.body,
+        status="QUEUED",
+        provenance={
+            "source": source,
+            "actor": actor,
+            "draft_id": str(draft.id),
+            "template_version": draft.template_version,
+            "delivery": "not-sent",
+        },
+    )
+    session.add(item)
+    session.flush()
+    return item

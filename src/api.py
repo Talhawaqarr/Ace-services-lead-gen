@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from src.config import get_settings
 from src.db import SessionLocal
 from src.ingestion.service import ingest_source_records
-from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, OutreachDraft, Project, RawProject
+from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, OutreachDraft, OutreachQueueItem, Project, RawProject
 from src.providers.samgov import SAMGovProvider
 from src.providers.usaspending import USASpendingProvider
 from src.pipeline.service import _project_payload, discover_contractors, run_local_fixture_pipeline
@@ -22,7 +22,7 @@ from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
 from src.opportunity.service import opportunity_payload, qualifies_opportunity
-from src.outreach.service import build_outreach_draft, list_outreach_draft_audits, set_outreach_draft_status
+from src.outreach.service import build_outreach_draft, list_outreach_draft_audits, queue_approved_outreach, set_outreach_draft_status
 
 configure_logging()
 app = FastAPI(title="ACE Services Review API", version="0.6.0")
@@ -502,6 +502,30 @@ def get_outreach_draft(match_id: str) -> OutreachDraftResponse:
         return OutreachDraftResponse(**_outreach_draft_payload(draft))
 
 
+
+class OutreachQueueResponse(BaseModel):
+    id: str
+    draft_id: str
+    recipient_email: str
+    subject: str
+    body: str
+    status: str
+    queued_at: str | None = None
+    provenance: dict[str, Any] = {}
+
+
+def _outreach_queue_payload(item: OutreachQueueItem) -> dict[str, Any]:
+    return {
+        "id": str(item.id),
+        "draft_id": str(item.draft_id),
+        "recipient_email": item.recipient_email,
+        "subject": item.subject,
+        "body": item.body,
+        "status": item.status,
+        "queued_at": item.queued_at.isoformat() if item.queued_at else None,
+        "provenance": item.provenance or {},
+    }
+
 @app.post("/outreach-drafts/{draft_id}/status", response_model=OutreachDraftResponse)
 def update_outreach_draft_status(draft_id: str, payload: ReviewRequest) -> OutreachDraftResponse:
     with SessionLocal() as session:
@@ -526,6 +550,25 @@ def update_outreach_draft_status(draft_id: str, payload: ReviewRequest) -> Outre
         session.commit()
         return OutreachDraftResponse(**_outreach_draft_payload(draft))
 
+
+
+@app.post("/outreach-drafts/{draft_id}/queue", response_model=OutreachQueueResponse)
+def queue_outreach_draft(draft_id: str) -> OutreachQueueResponse:
+    with SessionLocal() as session:
+        try:
+            normalized = str(uuid.UUID(draft_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid draft id") from exc
+
+        try:
+            item = queue_approved_outreach(session, normalized)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        session.commit()
+        return OutreachQueueResponse(**_outreach_queue_payload(item))
 
 @app.get("/outreach-drafts/{draft_id}/reviews", response_model=list[dict[str, Any]])
 def get_outreach_draft_reviews(draft_id: str) -> list[dict[str, Any]]:
