@@ -169,7 +169,11 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     posted_date = _normalize_date(raw.get("posted_date") or raw.get("postedDate"))
     response_deadline = _normalize_date(raw.get("response_deadline") or raw.get("responseDeadline") or raw.get("reponseDeadLine"))
     bid_date = _normalize_date(raw.get("bid_date") or raw.get("bidDate") or posted_date)
-    status = _normalized_text(raw.get("status") or raw.get("active") or raw.get("type"))
+    raw_active = raw.get("active")
+    if isinstance(raw_active, bool):
+        status = "ACTIVE" if raw_active else "INACTIVE"
+    else:
+        status = _normalized_text(raw.get("status") or raw_active or raw.get("type"))
     description = _normalized_text(raw.get("description"))
     source_url = _normalized_text(raw.get("uiLink") or raw.get("source_url"))
     estimated_value = _normalize_numeric(raw.get("estimated_value") or raw.get("estimatedValue"))
