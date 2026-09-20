@@ -19,8 +19,10 @@ from src.providers.samgov import SAMGovProvider
 from src.providers.usaspending import USASpendingProvider
 from src.pipeline.service import run_local_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
+from src.security import api_auth_middleware
 
-app = FastAPI(title="ACE Services Review API", version="0.5.0")
+app = FastAPI(title="ACE Services Review API", version="0.6.0")
+app.middleware("http")(api_auth_middleware)
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 
 
