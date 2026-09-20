@@ -44,6 +44,11 @@ class ProjectSummary(BaseModel):
     city: str | None = None
     state: str | None = None
     bid_date: str | None = None
+    posted_date: str | None = None
+    response_deadline: str | None = None
+    status: str | None = None
+    description: str | None = None
+    source_url: str | None = None
     estimated_value: float | None = None
     match_count: int = 0
 
@@ -145,6 +150,11 @@ def list_projects(limit: int = Query(default=50, ge=1, le=100), offset: int = Qu
                 city=row.city,
                 state=row.state,
                 bid_date=row.bid_date,
+                posted_date=row.posted_date,
+                response_deadline=row.response_deadline,
+                status=row.status,
+                description=row.description,
+                source_url=row.source_url,
                 estimated_value=row.estimated_value,
                 match_count=int(match_count_value),
             )
@@ -196,6 +206,11 @@ def get_project(project_id: str) -> dict[str, Any]:
             "longitude": row.longitude,
             "trades": row.trades,
             "bid_date": row.bid_date,
+            "posted_date": row.posted_date,
+            "response_deadline": row.response_deadline,
+            "status": row.status,
+            "description": row.description,
+            "source_url": row.source_url,
             "estimated_value": row.estimated_value,
             "provenance": row.provenance,
         }
@@ -251,6 +266,11 @@ def get_project_matches(project_id: str) -> ProjectWithMatches:
                 "city": project_row.city,
                 "state": project_row.state,
                 "bid_date": project_row.bid_date,
+                "posted_date": project_row.posted_date,
+                "response_deadline": project_row.response_deadline,
+                "status": project_row.status,
+                "description": project_row.description,
+                "source_url": project_row.source_url,
                 "estimated_value": project_row.estimated_value,
             },
             matches=match_items,
