@@ -16,7 +16,13 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
       function renderProjects() {
         const list = document.getElementById('projectList');
         list.innerHTML = '';
-        for (const project of state.projects) {
+        const search = (document.getElementById('projectSearch')?.value || '').trim().toLowerCase();
+        const stateFilter = document.getElementById('stateFilter')?.value || '';
+        const visibleProjects = state.projects.filter(project => {
+          const haystack = [project.name, project.city, project.state, project.description].filter(Boolean).join(' ').toLowerCase();
+          return (!search || haystack.includes(search)) && (!stateFilter || project.state === stateFilter);
+        });
+        for (const project of visibleProjects) {
           const item = document.createElement('li');
           item.className = 'project-item' + (project.id === state.selectedProjectId ? ' active' : '');
           item.innerHTML = `
@@ -28,6 +34,15 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
           item.onclick = () => selectProject(project.id);
           list.appendChild(item);
         }
+      }
+
+      function populateStateFilter() {
+        const select = document.getElementById('stateFilter');
+        if (!select) return;
+        const current = select.value;
+        const states = [...new Set(state.projects.map(project => project.state).filter(Boolean))].sort();
+        select.innerHTML = '<option value="">All states</option>' + states.map(value => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join('');
+        select.value = states.includes(current) ? current : '';
       }
 
       function statusBadge(status) {
@@ -174,6 +189,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
           if (!response.ok) throw new Error('Unable to load projects');
           const projects = await response.json();
           state.projects = projects.map(project => ({ ...project, match_count: project.match_count ?? 0 }));
+          populateStateFilter();
           if (!state.selectedProjectId && projects.length) {
             selectProject(projects[0].id);
           }
@@ -330,4 +346,6 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         }
       }
 
+      document.getElementById('projectSearch')?.addEventListener('input', renderProjects);
+      document.getElementById('stateFilter')?.addEventListener('change', renderProjects);
       loadProjects();
