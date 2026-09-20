@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "contractors": [
+    {
+      "source_id": "ENT-001",
+      "primary_email": "ops@atlasbuild.example",
+      "primary_phone": "+1 555 0101",
+      "website": "https://atlasbuild.example"
+    }
+  ]
+}
