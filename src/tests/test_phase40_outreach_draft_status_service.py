@@ -62,9 +62,9 @@ def test_same_status_is_idempotent_without_audit():
 def test_invalid_draft_transition_is_rejected():
     draft = SimpleNamespace(
         id="11111111-1111-1111-1111-111111111111",
-        status="DRAFT",
-        approved_at=None,
-        approved_by=None,
+        status="APPROVED",
+        approved_at="existing",
+        approved_by="reviewer-1",
         updated_at=None,
     )
     session = make_session(draft)
