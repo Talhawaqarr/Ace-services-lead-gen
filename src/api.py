@@ -21,6 +21,7 @@ from src.pipeline.service import run_local_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
+from src.opportunity.service import opportunity_payload, qualifies_opportunity, parse_opportunity_datetime
 
 configure_logging()
 app = FastAPI(title="ACE Services Review API", version="0.6.0")
@@ -161,6 +162,36 @@ def list_projects(limit: int = Query(default=50, ge=1, le=100), offset: int = Qu
             for row, match_count_value in rows
         ]
 
+
+
+@app.get("/opportunities", response_model=list[dict[str, Any]])
+def list_opportunities(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    source: str | None = None,
+    state: str | None = Query(default=None, min_length=2, max_length=2),
+    active_only: bool = True,
+    construction_only: bool = True,
+    deadline_within_days: int | None = Query(default=None, ge=1, le=365),
+) -> list[dict[str, Any]]:
+    with SessionLocal() as session:
+        query = select(Project).order_by(Project.response_deadline.asc().nullslast(), Project.name.asc())
+        if source:
+            query = query.where(Project.source == source.lower())
+        if state:
+            query = query.where(Project.state == state.upper())
+
+        rows = session.execute(query).scalars().all()
+        qualified = [
+            row for row in rows
+            if qualifies_opportunity(
+                row,
+                active_only=active_only,
+                construction_only=construction_only,
+                deadline_within_days=deadline_within_days,
+            )
+        ]
+        return [opportunity_payload(row) for row in qualified[offset:offset + limit]]
 
 
 @app.get("/contractors", response_model=list[ContractorSummary])
