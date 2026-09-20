@@ -10,6 +10,18 @@
     <div class="container">
       <div class="header">
         <h1>ACE Opportunity Review</h1><p class="muted">Qualified construction opportunities → contractor matches → human review → outreach approval.</p>
+        <div class="demo-panel">
+          <div>
+            <strong>Demo controls</strong>
+            <div class="project-meta">One bounded live SAM.gov construction lookup. Real opportunity data; demo contractor contacts remain synthetic and email delivery stays disabled.</div>
+          </div>
+          <div class="actions">
+            <input id="demoKeyword" type="text" value="36C26126Q1279" aria-label="SAM.gov solicitation or keyword" title="SAM.gov solicitation or keyword" />
+            <input id="demoState" type="text" value="CA" maxlength="2" aria-label="State" title="Two-letter state" />
+            <button class="secondary" onclick="runDemo()">Run tiny live SAM.gov sync</button>
+            <span id="demoStatus" class="muted">Ready — no live request made.</span>
+          </div>
+        </div>
       </div>
       <div class="grid">
         <aside class="panel">

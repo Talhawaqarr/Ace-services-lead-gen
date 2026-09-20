@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.ingestion.service import ingest_contractors, ingest_source_records
-from src.models.core import Contractor, Project
+from src.models.core import Contractor, Project, RawProject
 from src.opportunity.service import qualifies_opportunity
 from src.providers.samgov import SAMGovProvider
 from src.providers.samgov_contractors import SAMGovContractorProvider
@@ -180,4 +181,78 @@ def run_qualified_fixture_pipeline(
         "qualified_projects": len(qualified),
         "projects_processed": projects_processed,
         "matches_generated": generated,
+    }
+
+
+def run_demo_pipeline(
+    session: Session,
+    opportunity_provider: Any,
+    contractor_provider: Any | None = None,
+    *,
+    filters: dict[str, Any] | None = None,
+    deadline_within_days: int | None = None,
+) -> dict[str, Any]:
+    """Run the bounded live-data demo path through qualification and matching."""
+    contractor_provider = contractor_provider or SAMGovContractorProvider()
+    started_at = datetime.now(timezone.utc)
+
+    opportunity_summary = ingest_source_records(
+        session,
+        opportunity_provider,
+        source_name="samgov",
+        filters=filters,
+    )
+    contractor_summary = ingest_contractors(
+        session,
+        contractor_provider,
+        source_name="samgov",
+    )
+
+    demo_source_ids = session.execute(
+        select(RawProject.source_id)
+        .where(
+            RawProject.source == "samgov",
+            RawProject.fetched_at >= started_at,
+            RawProject.status.in_(["ACCEPTED", "DUPLICATE"]),
+        )
+    ).scalars().all()
+
+    projects = session.execute(
+        select(Project)
+        .where(
+            Project.source == "samgov",
+            Project.source_id.in_(demo_source_ids),
+        )
+        .order_by(Project.response_deadline.asc().nullslast(), Project.name.asc())
+    ).scalars().all()
+
+    qualified = [
+        project
+        for project in projects
+        if qualifies_opportunity(project, deadline_within_days=deadline_within_days)
+    ]
+
+    generated = 0
+    projects_processed = 0
+    candidates_considered = 0
+    for project in qualified:
+        candidates = discover_contractors(session, project, source="samgov")
+        candidates_considered += len(candidates)
+        if not candidates:
+            continue
+        matches = generate_matches(session, _project_payload(project), candidates)
+        generated += len(matches)
+        projects_processed += 1
+
+    session.flush()
+
+    return {
+        "opportunities": opportunity_summary,
+        "contractors": contractor_summary,
+        "projects_discovered": len(projects),
+        "qualified_projects": len(qualified),
+        "projects_processed": projects_processed,
+        "candidates_considered": candidates_considered,
+        "matches_generated": generated,
+        "demo": True,
     }

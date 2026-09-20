@@ -353,8 +353,13 @@ def _contractor_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | N
     return normalized, None
 
 
-def ingest_source_records(session: Session, provider: Any, source_name: str | None = None) -> dict[str, Any]:
-    provider_filters: dict[str, Any] = {}
+def ingest_source_records(
+    session: Session,
+    provider: Any,
+    source_name: str | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    provider_filters: dict[str, Any] = dict(filters or {})
     if (source_name or getattr(provider, "source_name", "unknown")).strip().lower() == "samgov":
         # Keep live ingestion focused on construction and bounded to one page by default.
         from src.config import get_settings
@@ -362,6 +367,7 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
         provider_filters = {
             "naics": "23",
             "limit": settings.samgov_page_limit,
+            **provider_filters,
         }
 
     records = provider.list_projects(provider_filters) if hasattr(provider, "list_projects") else []

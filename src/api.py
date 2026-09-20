@@ -17,9 +17,10 @@ from src.db import SessionLocal
 from src.ingestion.service import ingest_source_records
 from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, OutreachDraft, OutreachQueueItem, Project, RawProject
 from src.providers.samgov import SAMGovProvider
+from src.providers.samgov_contractors import SAMGovContractorProvider
 from src.providers.live_samgov import LiveSAMGovProvider, SAMGovRateLimitError
 from src.providers.usaspending import USASpendingProvider
-from src.pipeline.service import _project_payload, discover_contractors, run_qualified_fixture_pipeline
+from src.pipeline.service import _project_payload, discover_contractors, run_demo_pipeline, run_qualified_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
@@ -692,6 +693,19 @@ def list_ingestion_sources() -> dict[str, Any]:
     }
 
 
+@app.get("/outreach-queue")
+def list_outreach_queue(
+    status: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[dict[str, Any]]:
+    with SessionLocal() as session:
+        query = select(OutreachQueueItem).order_by(OutreachQueueItem.queued_at.desc(), OutreachQueueItem.id.desc())
+        if status:
+            query = query.where(OutreachQueueItem.status == status.upper())
+        rows = session.execute(query.limit(limit)).scalars().all()
+        return [_outreach_queue_payload(row) for row in rows]
+
+
 @app.get("/ingestion/runs")
 def list_ingestion_runs() -> list[dict[str, Any]]:
     with SessionLocal() as session:
@@ -750,3 +764,58 @@ def run_ingestion(source: str) -> dict[str, Any]:
             raise
         summary["source"] = source
         return summary
+
+
+@app.post("/demo/run")
+def run_demo(
+    keyword: str = Query(default="36C26126Q1279", min_length=1, max_length=100),
+    state: str = Query(default="CA", min_length=2, max_length=2),
+) -> dict[str, Any]:
+    """Run one tiny live SAM.gov demo search through qualification and matching."""
+    settings = get_settings()
+    if settings.ingestion_mode != "samgov":
+        raise HTTPException(
+            status_code=409,
+            detail="Live demo requires INGESTION_MODE=samgov with SAMGOV_API_KEY configured.",
+        )
+
+    provider = LiveSAMGovProvider(
+        settings.samgov_api_key or "",
+        max_pages=1,
+    )
+    # Hard cap the demo request to one page of one record. The default keyword
+    # targets a currently documented real SAM.gov construction notice so the
+    # demo can start with real public data while remaining tiny.
+    filters = {
+        "keyword": keyword,
+        "state": state.upper(),
+        "naics": "236220",
+        "limit": 1,
+    }
+
+    with SessionLocal() as session:
+        try:
+            summary = run_demo_pipeline(
+                session,
+                provider,
+                SAMGovContractorProvider(),
+                filters=filters,
+            )
+            session.commit()
+        except SAMGovRateLimitError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=429,
+                detail="SAM.gov API rate limit reached. No demo records were committed; wait for the quota reset before retrying.",
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=502,
+                detail=f"Upstream SAM.gov API request failed with HTTP {exc.response.status_code}",
+            ) from exc
+        except Exception:
+            session.rollback()
+            raise
+
+    return summary
