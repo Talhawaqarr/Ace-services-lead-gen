@@ -61,7 +61,31 @@ def discover_contractors(
         .where(Contractor.source == source)
         .order_by(Contractor.company_name.asc(), Contractor.source_id.asc())
     ).scalars().all()
-    return [_contractor_payload(row) for row in rows]
+
+    project_state = str(project.state or "").strip().lower()
+    project_trades = {
+        str(value).strip().lower()
+        for value in (project.trades or [])
+        if str(value).strip()
+    }
+
+    candidates = []
+    for row in rows:
+        contractor_state = str(row.state or "").strip().lower()
+        contractor_trades = {
+            str(value).strip().lower()
+            for value in (row.trades or [])
+            if str(value).strip()
+        }
+
+        if project_state and contractor_state and project_state != contractor_state:
+            continue
+        if project_trades and contractor_trades and not project_trades.intersection(contractor_trades):
+            continue
+
+        candidates.append(row)
+
+    return [_contractor_payload(row) for row in candidates]
 
 
 def run_local_fixture_pipeline(
