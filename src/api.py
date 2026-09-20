@@ -118,7 +118,9 @@ def runtime_config() -> dict[str, Any]:
         "llm_provider": settings.llm_provider,
         "dry_run": settings.dry_run,
         "max_emails_per_hour": settings.max_emails_per_hour,
-        "samgov_api_key_configured": settings.samgov_api_key is not None,\n        "samgov_page_limit": settings.samgov_page_limit,\n        "samgov_max_pages": settings.samgov_max_pages,
+        "samgov_api_key_configured": settings.samgov_api_key is not None,
+        "samgov_page_limit": settings.samgov_page_limit,
+        "samgov_max_pages": settings.samgov_max_pages,
     }
 
 
