@@ -304,6 +304,8 @@ def _contractor_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | N
     email = _normalized_text(raw.get("primary_email") or raw.get("email") or contact.get("email"))
     if email:
         email = email.lower().strip()
+    phone = _normalized_text(raw.get("primary_phone") or raw.get("phone") or contact.get("phone"))
+    website = _normalized_text(raw.get("website") or raw.get("website_url") or contact.get("website"))
 
     raw_payload = dict(raw)
     normalized = {
@@ -316,6 +318,8 @@ def _contractor_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | N
         "state": state,
         "trades": trades,
         "primary_email": email,
+        "primary_phone": phone,
+        "website": website,
         "provenance": {
             "source": source,
             "source_id": source_id,
@@ -508,6 +512,10 @@ def ingest_contractors(session: Session, provider: Any, source_name: str | None 
                 canonical.trades = normalized["trades"]
             if canonical.primary_email is None and normalized.get("primary_email"):
                 canonical.primary_email = normalized["primary_email"]
+            if canonical.primary_phone is None and normalized.get("primary_phone"):
+                canonical.primary_phone = normalized["primary_phone"]
+            if canonical.website is None and normalized.get("website"):
+                canonical.website = normalized["website"]
             if canonical.provenance is None:
                 canonical.provenance = normalized.get("provenance")
             session.flush()
@@ -522,6 +530,8 @@ def ingest_contractors(session: Session, provider: Any, source_name: str | None 
             state=normalized.get("state"),
             trades=normalized.get("trades"),
             primary_email=normalized.get("primary_email"),
+            primary_phone=normalized.get("primary_phone"),
+            website=normalized.get("website"),
             provenance=normalized.get("provenance"),
         )
         session.add(contractor)
