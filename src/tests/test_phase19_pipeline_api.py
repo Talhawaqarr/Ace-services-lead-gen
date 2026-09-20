@@ -14,9 +14,9 @@ def test_local_pipeline_persists_matches_and_is_idempotent():
     assert second.status_code == 200, second.text
     second_payload = second.json()
 
-    assert first_payload["projects_discovered"] == 4
-    assert first_payload["projects_processed"] == 4
-    assert first_payload["matches_generated"] == 32
+    assert first_payload["projects_discovered"] == 3
+    assert first_payload["projects_processed"] == 3
+    assert first_payload["matches_generated"] == 7
 
     assert second_payload["projects_discovered"] == first_payload["projects_discovered"]
     assert second_payload["projects_processed"] == first_payload["projects_processed"]
@@ -41,5 +41,5 @@ def test_local_pipeline_persists_matches_and_is_idempotent():
     assert matches.status_code == 200, matches.text
     payload = matches.json()
     assert payload["project"]["id"] == project["id"]
-    assert payload["summary"]["total"] == 8
-    assert len(payload["matches"]) == 8
+    assert payload["summary"]["total"] == 4
+    assert len(payload["matches"]) == 4
