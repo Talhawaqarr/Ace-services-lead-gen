@@ -115,7 +115,7 @@ class LiveSAMGovProvider(OpportunityProvider):
         }
 
     def get_project_details(self, source_id: str) -> dict[str, Any]:
-        result = self.list_projects({"source_id": source_id, "limit": 1})
+        result = self.list_projects({"keyword": source_id, "limit": 1, "posted_from": "01/01/2000", "posted_to": date.today()})
         for row in result["projects"]:
             solicitation = row.get("solicitationNumber") or row.get("source_id")
             notice_id = row.get("noticeId") or row.get("noticeid")
