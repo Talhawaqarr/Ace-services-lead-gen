@@ -90,7 +90,7 @@ def test_match_generation_uses_filtered_candidates_for_qualified_opportunity():
             Contractor(
                 company_name="Wrong Trade",
                 normalized_name="wrong trade",
-                source="phase29-qualified",
+                source=source,
                 source_id="wrong-trade",
                 state="CA",
                 trades=["electrical"],
