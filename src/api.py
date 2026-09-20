@@ -17,7 +17,7 @@ from src.ingestion.service import ingest_source_records
 from src.models.core import Contractor, IngestionRun, MatchRecord, Project, RawProject
 from src.providers.samgov import SAMGovProvider
 from src.providers.usaspending import USASpendingProvider
-from src.pipeline.service import run_local_fixture_pipeline
+from src.pipeline.service import _project_payload, discover_contractors, run_local_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
@@ -398,33 +398,14 @@ def generate_project_matches(project_id: str) -> dict[str, Any]:
         if project_row is None:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        contractor_rows = session.execute(select(Contractor)).scalars().all()
-        contractors = [{
-            "id": str(row.id),
-            "company_name": row.company_name,
-            "normalized_name": row.normalized_name,
-            "source": row.source,
-            "source_id": row.source_id,
-            "city": row.city,
-            "state": row.state,
-            "latitude": None,
-            "longitude": None,
-            "trades": row.trades,
-        } for row in contractor_rows]
+        if not qualifies_opportunity(project_row):
+            raise HTTPException(
+                status_code=409,
+                detail="Opportunity does not qualify for matching",
+            )
 
-        project_payload = {
-            "id": str(project_row.id),
-            "name": project_row.name,
-            "source": project_row.source,
-            "source_id": project_row.source_id,
-            "city": project_row.city,
-            "state": project_row.state,
-            "latitude": project_row.latitude,
-            "longitude": project_row.longitude,
-            "trades": project_row.trades,
-            "bid_date": project_row.bid_date,
-            "estimated_value": project_row.estimated_value,
-        }
+        contractors = discover_contractors(session, project_row, source=project_row.source)
+        project_payload = _project_payload(project_row)
         matches = generate_matches(session, project_payload, contractors)
         session.commit()
         return {"generated": len(matches), "project_id": str(project_row.id)}
