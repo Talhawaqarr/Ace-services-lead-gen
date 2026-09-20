@@ -670,10 +670,12 @@ def list_ingestion_sources() -> dict[str, Any]:
             },
             {
                 "name": "samgov",
-                "type": "fixture-backed-source-contract",
-                "requires_credentials": False,
-                "status": "local-only",
-                "live_integration_disabled": True,
+                "type": "official-public-api",
+                "requires_credentials": True,
+                "status": "live" if get_settings().ingestion_mode == "samgov" else "fixture",
+                "live_integration_enabled": get_settings().ingestion_mode == "samgov",
+                "page_limit": get_settings().samgov_page_limit,
+                "max_pages": get_settings().samgov_max_pages,
             },
         ]
     }
@@ -712,7 +714,11 @@ def run_ingestion(source: str) -> dict[str, Any]:
     with SessionLocal() as session:
         provider = providers[source]()
         if source == "samgov" and get_settings().ingestion_mode == "samgov":
-            provider = LiveSAMGovProvider(get_settings().samgov_api_key or "")
+            settings = get_settings()
+            provider = LiveSAMGovProvider(
+                settings.samgov_api_key or "",
+                max_pages=settings.samgov_max_pages,
+            )
         try:
             summary = ingest_source_records(session, provider, source_name=source)
             session.commit()
