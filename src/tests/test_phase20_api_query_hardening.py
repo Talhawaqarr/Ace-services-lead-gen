@@ -8,7 +8,14 @@ from src.api import app
 from src.config import get_settings
 
 
+def _seed_pipeline() -> dict:
+    response = TestClient(app).post("/pipeline/local/run")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def test_projects_endpoint_returns_persisted_match_count_without_changing_pagination():
+    _seed_pipeline()
     response = TestClient(app).get("/projects?limit=100")
 
     assert response.status_code == 200
@@ -18,6 +25,7 @@ def test_projects_endpoint_returns_persisted_match_count_without_changing_pagina
 
 
 def test_project_matches_endpoint_returns_joined_contractor_data():
+    _seed_pipeline()
     projects = TestClient(app).get("/projects?limit=100")
     assert projects.status_code == 200
 
