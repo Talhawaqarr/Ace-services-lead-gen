@@ -213,7 +213,7 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     response_deadline = _normalize_date(raw.get("response_deadline") or raw.get("responseDeadline") or raw.get("reponseDeadLine"))
     bid_date = _normalize_date(raw.get("bid_date") or raw.get("bidDate") or posted_date)
     raw_active = raw.get("active")
-    status = _normalize_active_status(raw_active or raw.get("status"))
+    status = _normalize_active_status(raw_active if raw_active is not None else raw.get("status"))
     if status is None and source != "samgov":
         status = _normalized_text(raw.get("type"))
     description = _normalized_text(raw.get("description"))
