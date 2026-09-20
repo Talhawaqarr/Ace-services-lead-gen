@@ -7,7 +7,7 @@ from typing import Any, Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.models.core import Contractor, IngestionRun, Project, RawProject
+from src.models.core import Contractor, IngestionRun, Project, RawContractor, RawProject
 
 
 def _effective_source_id(raw: dict[str, Any]) -> str | None:
@@ -20,6 +20,17 @@ def _effective_source_id(raw: dict[str, Any]) -> str | None:
             return solicitation
     source_id = _normalized_text(raw.get("source_id") or raw.get("id") or raw.get("solicitationNumber") or raw.get("noticeid"))
     return source_id
+
+
+def _effective_contractor_source_id(raw: dict[str, Any]) -> str | None:
+    if not isinstance(raw, dict):
+        return None
+    source = (raw.get("source") or "").strip().lower()
+    if source == "samgov":
+        entity_id = _normalized_text(raw.get("entity_id") or raw.get("sam_id") or raw.get("entityId"))
+        if entity_id:
+            return entity_id
+    return _normalized_text(raw.get("source_id") or raw.get("contractor_id") or raw.get("id"))
 
 
 @dataclass
@@ -231,7 +242,7 @@ def _contractor_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | N
         return {}, "Contractor record must be an object"
 
     source = (raw.get("source") or "unknown").strip().lower()
-    source_id = _effective_source_id(raw) or _normalized_text(raw.get("source_id") or raw.get("entity_id") or raw.get("contractor_id") or raw.get("id"))
+    source_id = _effective_contractor_source_id(raw)
     if not source or not source_id:
         return {}, "Missing source or source_id"
 
@@ -402,10 +413,16 @@ def ingest_contractors(session: Session, provider: Any, source_name: str | None 
     )
 
     for raw in payloads:
-        source_id = _effective_source_id(raw) or str(raw.get("source_id") or raw.get("entity_id") or raw.get("contractor_id") or raw.get("id") or "unknown")
-        existing = session.execute(select(RawProject).where(RawProject.source == source, RawProject.source_id == source_id)).scalar_one_or_none()
+        source_id = _effective_contractor_source_id(raw) or "unknown"
+        existing = session.execute(select(RawContractor).where(RawContractor.source == source, RawContractor.source_id == source_id)).scalar_one_or_none()
         if existing is None:
-            existing = _build_raw_record(source, raw, "RECEIVED")
+            existing = RawContractor(
+                source=source,
+                source_id=source_id,
+                fetched_at=datetime.now(timezone.utc),
+                raw_payload=raw,
+                status="RECEIVED",
+            )
             session.add(existing)
             session.flush()
 
