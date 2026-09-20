@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.providers.contracts import ContractorProvider
+
 
 class SAMGovContractorProvider:
     """Fixture-backed SAM.gov-style contractor source.
