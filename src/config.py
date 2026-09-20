@@ -24,6 +24,8 @@ class Settings:
     samgov_api_key: str | None = field(default=None, repr=False)
     api_auth_token: str | None = field(default=None, repr=False)
     max_emails_per_hour: int = 100
+    samgov_page_limit: int = 100
+    samgov_max_pages: int = 1
 
     @property
     def is_production(self) -> bool:
@@ -38,6 +40,10 @@ class Settings:
             raise ValueError("SAMGOV_API_KEY must be configured when INGESTION_MODE=samgov")
         if self.max_emails_per_hour < 0:
             raise ValueError("MAX_EMAILS_PER_HOUR must be >= 0")
+        if self.samgov_page_limit < 1 or self.samgov_page_limit > 1000:
+            raise ValueError("SAMGOV_PAGE_LIMIT must be between 1 and 1000")
+        if self.samgov_max_pages < 1:
+            raise ValueError("SAMGOV_MAX_PAGES must be >= 1")
         if self.is_production and self.dry_run:
             raise ValueError("DRY_RUN=true is not allowed when APP_ENV=production")
         if self.is_production and self.email_provider == "mock":
@@ -59,6 +65,8 @@ def get_settings() -> Settings:
         samgov_api_key=os.getenv("SAMGOV_API_KEY") or None,
         api_auth_token=os.getenv("API_AUTH_TOKEN") or None,
         max_emails_per_hour=int(os.getenv("MAX_EMAILS_PER_HOUR", "100")),
+        samgov_page_limit=int(os.getenv("SAMGOV_PAGE_LIMIT", "100")),
+        samgov_max_pages=int(os.getenv("SAMGOV_MAX_PAGES", "1")),
     )
     settings.validate()
     return settings
