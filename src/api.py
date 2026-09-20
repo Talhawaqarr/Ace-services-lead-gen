@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from src.config import get_settings
 from src.db import SessionLocal
 from src.ingestion.service import ingest_source_records
-from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, Project, RawProject
+from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, OutreachDraft, Project, RawProject
 from src.providers.samgov import SAMGovProvider
 from src.providers.usaspending import USASpendingProvider
 from src.pipeline.service import _project_payload, discover_contractors, run_local_fixture_pipeline
@@ -22,6 +22,7 @@ from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
 from src.opportunity.service import opportunity_payload, qualifies_opportunity
+from src.outreach.service import build_outreach_draft
 
 configure_logging()
 app = FastAPI(title="ACE Services Review API", version="0.6.0")
@@ -428,6 +429,78 @@ def list_match_reviews(match_id: str) -> list[dict[str, Any]]:
             }
             for audit in audits
         ]
+
+class OutreachDraftResponse(BaseModel):
+    id: str
+    match_id: str
+    template_version: str
+    recipient_email: str
+    subject: str
+    body: str
+    status: str
+    generated_at: str | None = None
+    approved_at: str | None = None
+    approved_by: str | None = None
+    provenance: dict[str, Any] = {}
+
+
+def _outreach_draft_payload(draft: OutreachDraft) -> dict[str, Any]:
+    return {
+        "id": str(draft.id),
+        "match_id": str(draft.match_id),
+        "template_version": draft.template_version,
+        "recipient_email": draft.recipient_email,
+        "subject": draft.subject,
+        "body": draft.body,
+        "status": draft.status,
+        "generated_at": draft.generated_at.isoformat() if draft.generated_at else None,
+        "approved_at": draft.approved_at.isoformat() if draft.approved_at else None,
+        "approved_by": draft.approved_by,
+        "provenance": draft.provenance or {},
+    }
+
+
+@app.post("/matches/{match_id}/outreach-draft", response_model=OutreachDraftResponse)
+def create_outreach_draft(match_id: str) -> OutreachDraftResponse:
+    with SessionLocal() as session:
+        try:
+            normalized = str(uuid.UUID(match_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid match id") from exc
+
+        try:
+            draft = build_outreach_draft(session, normalized)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        session.commit()
+        return OutreachDraftResponse(**_outreach_draft_payload(draft))
+
+
+@app.get("/matches/{match_id}/outreach-draft", response_model=OutreachDraftResponse)
+def get_outreach_draft(match_id: str) -> OutreachDraftResponse:
+    with SessionLocal() as session:
+        try:
+            normalized = str(uuid.UUID(match_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid match id") from exc
+
+        match = session.get(MatchRecord, uuid.UUID(normalized))
+        if match is None:
+            raise HTTPException(status_code=404, detail="Match not found")
+
+        draft = session.execute(
+            select(OutreachDraft)
+            .where(OutreachDraft.match_id == match.id)
+            .order_by(OutreachDraft.generated_at.desc(), OutreachDraft.id.desc())
+        ).scalars().first()
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Outreach draft not found")
+
+        return OutreachDraftResponse(**_outreach_draft_payload(draft))
+
 
 @app.post("/matches/{match_id}/review", response_model=dict[str, Any])
 def review_match(match_id: str, payload: ReviewRequest) -> dict[str, Any]:

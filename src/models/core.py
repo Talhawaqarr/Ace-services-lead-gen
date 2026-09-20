@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, JSON, Float, ForeignKey, Integer, UniqueConstraint, Index, DateTime
+from sqlalchemy import Column, String, JSON, Float, ForeignKey, Integer, UniqueConstraint, Index, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from .base import Base, TimestampMixin
 
@@ -151,3 +151,25 @@ class MatchReviewAudit(Base, TimestampMixin):
         Index("ix_match_review_audit_match_id", "match_id"),
     )
 
+
+
+class OutreachDraft(Base, TimestampMixin):
+    __tablename__ = "outreach_drafts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    match_id = Column(UUID(as_uuid=True), ForeignKey("match_records.id"), nullable=False)
+    template_version = Column(String, nullable=False)
+    recipient_email = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    body = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="DRAFT")
+    generated_at = Column(DateTime, nullable=False, server_default=func.now())
+    approved_at = Column(DateTime, nullable=True)
+    approved_by = Column(String, nullable=True)
+    provenance = Column(JSON, default=dict)
+
+    __table_args__ = (
+        UniqueConstraint("match_id", "template_version", name="uq_outreach_drafts_match_template"),
+        Index("ix_outreach_drafts_match_id", "match_id"),
+        Index("ix_outreach_drafts_status", "status"),
+    )
