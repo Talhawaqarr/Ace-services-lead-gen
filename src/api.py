@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from src.config import get_settings
 from src.db import SessionLocal
 from src.ingestion.service import ingest_source_records
-from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, Project, RawProject
+from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, OutreachDraft, Project, RawProject
 from src.providers.samgov import SAMGovProvider
 from src.providers.usaspending import USASpendingProvider
 from src.pipeline.service import _project_payload, discover_contractors, run_local_fixture_pipeline
@@ -22,6 +22,7 @@ from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
 from src.opportunity.service import opportunity_payload, qualifies_opportunity
+from src.outreach.service import build_outreach_draft
 
 configure_logging()
 app = FastAPI(title="ACE Services Review API", version="0.6.0")
