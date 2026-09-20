@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import date, timedelta
 from typing import Any
 
@@ -11,8 +12,9 @@ from src.providers.contracts import OpportunityProvider
 class LiveSAMGovProvider(OpportunityProvider):
     """Live SAM.gov Contract Opportunities API provider.
 
-    This provider uses the official public Contract Opportunities API rather than
-    scraping SAM.gov. It is deliberately separate from the offline fixture provider.
+    Uses the official public Contract Opportunities API. The provider can
+    transparently paginate a complete sync while retaining page-token behavior
+    for callers that need one page at a time.
     """
 
     source_name = "samgov"
@@ -24,26 +26,61 @@ class LiveSAMGovProvider(OpportunityProvider):
         base_url: str = "https://api.sam.gov/opportunities/v2/search",
         timeout: float = 30.0,
         http_client: httpx.Client | None = None,
+        auto_paginate: bool = True,
+        max_pages: int = 100,
+        max_retries: int = 3,
+        retry_backoff_seconds: float = 1.0,
     ):
         if not api_key or not api_key.strip():
             raise ValueError("SAMGOV_API_KEY is required for the live provider")
+        if max_pages < 1:
+            raise ValueError("max_pages must be >= 1")
+        if max_retries < 0:
+            raise ValueError("max_retries must be >= 0")
         self.api_key = api_key.strip()
         self.base_url = base_url
         self.timeout = timeout
         self._client = http_client
+        self.auto_paginate = auto_paginate
+        self.max_pages = max_pages
+        self.max_retries = max_retries
+        self.retry_backoff_seconds = max(retry_backoff_seconds, 0.0)
 
     def _request(self, params: dict[str, Any]) -> dict[str, Any]:
         request_params = {"api_key": self.api_key, **params}
-        if self._client is not None:
-            response = self._client.get(self.base_url, params=request_params)
-        else:
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.get(self.base_url, params=request_params)
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise ValueError("SAM.gov API returned a non-object response")
-        return payload
+        attempts = 0
+
+        while True:
+            try:
+                if self._client is not None:
+                    response = self._client.get(self.base_url, params=request_params)
+                else:
+                    with httpx.Client(timeout=self.timeout) as client:
+                        response = client.get(self.base_url, params=request_params)
+            except (httpx.TimeoutException, httpx.NetworkError):
+                if attempts >= self.max_retries:
+                    raise
+                time.sleep(self.retry_backoff_seconds * (2**attempts))
+                attempts += 1
+                continue
+
+            if response.status_code == 429 or 500 <= response.status_code < 600:
+                if attempts >= self.max_retries:
+                    response.raise_for_status()
+                retry_after = response.headers.get("Retry-After")
+                try:
+                    delay = float(retry_after) if retry_after else self.retry_backoff_seconds * (2**attempts)
+                except ValueError:
+                    delay = self.retry_backoff_seconds * (2**attempts)
+                time.sleep(max(delay, 0.0))
+                attempts += 1
+                continue
+
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("SAM.gov API returned a non-object response")
+            return payload
 
     @staticmethod
     def _date_range(filters: dict[str, Any]) -> tuple[str, str]:
@@ -55,12 +92,11 @@ class LiveSAMGovProvider(OpportunityProvider):
             posted_to = posted_to.strftime("%m/%d/%Y")
         return str(posted_from), str(posted_to)
 
-    def list_projects(
+    def _list_page(
         self,
-        filters: dict[str, Any] | None = None,
-        page_token: str | None = None,
+        filters: dict[str, Any],
+        page_token: str | None,
     ) -> dict[str, Any]:
-        filters = filters or {}
         posted_from, posted_to = self._date_range(filters)
         params: dict[str, Any] = {
             "postedFrom": posted_from,
@@ -97,7 +133,11 @@ class LiveSAMGovProvider(OpportunityProvider):
         total = payload.get("totalRecords")
         limit = int(payload.get("limit") or params["limit"])
         offset = int(payload.get("offset") or params["offset"])
-        next_offset = offset + limit if isinstance(total, int) and offset + limit < total else None
+        next_offset = (
+            offset + limit
+            if isinstance(total, int) and offset + limit < total
+            else None
+        )
 
         return {
             "projects": normalized,
@@ -114,8 +154,48 @@ class LiveSAMGovProvider(OpportunityProvider):
             },
         }
 
+    def list_projects(
+        self,
+        filters: dict[str, Any] | None = None,
+        page_token: str | None = None,
+    ) -> dict[str, Any]:
+        filters = dict(filters or {})
+        first = self._list_page(filters, page_token)
+        if not self.auto_paginate or page_token is not None:
+            return first
+
+        projects = list(first["projects"])
+        meta = dict(first["meta"])
+        next_token = first["next_page_token"]
+        pages_fetched = 1
+
+        while next_token is not None:
+            if pages_fetched >= self.max_pages:
+                raise RuntimeError(
+                    f"SAM.gov pagination exceeded max_pages={self.max_pages}"
+                )
+            page = self._list_page(filters, next_token)
+            projects.extend(page["projects"])
+            next_token = page["next_page_token"]
+            pages_fetched += 1
+
+        meta["pages_fetched"] = pages_fetched
+        meta["records_returned"] = len(projects)
+        return {
+            "projects": projects,
+            "next_page_token": None,
+            "meta": meta,
+        }
+
     def get_project_details(self, source_id: str) -> dict[str, Any]:
-        result = self.list_projects({"keyword": source_id, "limit": 1, "posted_from": "01/01/2000", "posted_to": date.today()})
+        result = self.list_projects(
+            {
+                "keyword": source_id,
+                "limit": 1,
+                "posted_from": "01/01/2000",
+                "posted_to": date.today(),
+            }
+        )
         for row in result["projects"]:
             solicitation = row.get("solicitationNumber") or row.get("source_id")
             notice_id = row.get("noticeId") or row.get("noticeid")
@@ -131,6 +211,9 @@ class LiveSAMGovProvider(OpportunityProvider):
                 "live": True,
                 "synthetic": False,
                 "base_url": self.base_url,
+                "auto_paginate": self.auto_paginate,
+                "max_pages": self.max_pages,
+                "max_retries": self.max_retries,
             },
         }
 
