@@ -16,6 +16,7 @@ from src.ingestion.service import ingest_source_records
 from src.models.core import Contractor, IngestionRun, MatchRecord, Project, RawProject
 from src.providers.samgov import SAMGovProvider
 from src.providers.usaspending import USASpendingProvider
+from src.pipeline.service import run_local_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
 
 app = FastAPI(title="ACE Services Review API", version="0.4.0")
@@ -314,6 +315,14 @@ def generate_project_matches(project_id: str) -> dict[str, Any]:
         matches = generate_matches(session, project_payload, contractors)
         session.commit()
         return {"generated": len(matches), "project_id": str(project_row.id)}
+
+
+@app.post("/pipeline/local/run")
+def run_local_pipeline() -> dict[str, Any]:
+    with SessionLocal() as session:
+        summary = run_local_fixture_pipeline(session)
+        session.commit()
+        return summary
 
 
 @app.get("/ingestion/sources")
