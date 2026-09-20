@@ -15,7 +15,7 @@ def test_compose_is_explicitly_zero_cost_development_runtime():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "postgres:16-alpine" in compose
     assert "APP_ENV: development" in compose
-    assert "INGESTION_MODE: fixture" in compose
+    assert "INGESTION_MODE: ${INGESTION_MODE:-fixture}" in compose
     assert "EMAIL_PROVIDER: mock" in compose
     assert 'DRY_RUN: "true"' in compose
 
