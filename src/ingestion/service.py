@@ -383,7 +383,6 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
     run.duplicates = summary.duplicates
     run.errors = summary.errors
     session.add(run)
-    session.commit()
     return summary.as_dict()
 
 
@@ -481,7 +480,6 @@ def ingest_contractors(session: Session, provider: Any, source_name: str | None 
     run.duplicates = summary.duplicates
     run.errors = summary.errors
     session.add(run)
-    session.commit()
     return summary.as_dict()
 
 
