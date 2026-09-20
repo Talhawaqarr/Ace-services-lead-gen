@@ -10,7 +10,21 @@ from src.models.core import Contractor, MatchRecord, Project
 client = TestClient(app)
 
 
+def _cleanup_source(source: str) -> None:
+    session = SessionLocal()
+    try:
+        project_ids = [row.id for row in session.query(Project.id).filter(Project.source == source).all()]
+        if project_ids:
+            session.query(MatchRecord).filter(MatchRecord.project_id.in_(project_ids)).delete(synchronize_session=False)
+        session.query(Project).filter(Project.source == source).delete(synchronize_session=False)
+        session.query(Contractor).filter(Contractor.source == source).delete(synchronize_session=False)
+        session.commit()
+    finally:
+        session.close()
+
+
 def _seed(source: str, qualified: bool) -> str:
+    _cleanup_source(source)
     session = SessionLocal()
     try:
         project = Project(
@@ -48,11 +62,7 @@ def test_match_generation_rejects_unqualified_opportunity():
         assert response.status_code == 409
         assert response.json()["detail"] == "Opportunity does not qualify for matching"
     finally:
-        session = SessionLocal()
-        session.query(Project).filter(Project.source == "phase29-unqualified").delete(synchronize_session=False)
-        session.query(Contractor).filter(Contractor.source == "phase29-unqualified").delete(synchronize_session=False)
-        session.commit()
-        session.close()
+        _cleanup_source("phase29-unqualified")
 
 
 def test_match_generation_uses_filtered_candidates_for_qualified_opportunity():
@@ -88,11 +98,4 @@ def test_match_generation_uses_filtered_candidates_for_qualified_opportunity():
         assert response.status_code == 200
         assert response.json()["generated"] == 1
     finally:
-        session = SessionLocal()
-        project_ids = [row.id for row in session.query(Project.id).filter(Project.source == "phase29-qualified").all()]
-        if project_ids:
-            session.query(MatchRecord).filter(MatchRecord.project_id.in_(project_ids)).delete(synchronize_session=False)
-        session.query(Project).filter(Project.source == "phase29-qualified").delete(synchronize_session=False)
-        session.query(Contractor).filter(Contractor.source == "phase29-qualified").delete(synchronize_session=False)
-        session.commit()
-        session.close()
+        _cleanup_source("phase29-qualified")
