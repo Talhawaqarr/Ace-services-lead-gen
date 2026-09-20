@@ -11,6 +11,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         outreachDrafts: {},
         outreachAudits: {},
         message: null,
+        workspaceRequestId: 0,
       };
 
       function renderProjects() {
@@ -43,6 +44,16 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         const states = [...new Set(state.projects.map(project => project.state).filter(Boolean))].sort();
         select.innerHTML = '<option value="">All states</option>' + states.map(value => '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>').join('');
         select.value = states.includes(current) ? current : '';
+      }
+
+      async function readJson(response) {
+        const text = await response.text();
+        if (!text) return {};
+        try {
+          return JSON.parse(text);
+        } catch {
+          return { detail: text.slice(0, 300) || 'Unexpected server response' };
+        }
       }
 
       function statusBadge(status) {
@@ -203,12 +214,16 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
 
       async function refreshProjectMatches() {
         if (!state.selectedProjectId) return;
+        const requestId = ++state.workspaceRequestId;
+        const projectId = state.selectedProjectId;
         try {
           const params = new URLSearchParams({ limit: String(state.matchLimit), offset: String(state.matchOffset) });
           if (state.matchStatus) params.set('review_status', state.matchStatus);
-          const response = await fetch(`/projects/${state.selectedProjectId}/matches?${params.toString()}`);
-          if (!response.ok) throw new Error('Unable to load matches');
-          state.projectMatches = await response.json();
+          const response = await fetch(`/projects/${projectId}/matches?${params.toString()}`);
+          const body = await readJson(response);
+          if (requestId !== state.workspaceRequestId || projectId !== state.selectedProjectId) return;
+          if (!response.ok) throw new Error(body.detail || 'Unable to load matches');
+          state.projectMatches = body;
           const visibleMatchIds = new Set(state.projectMatches.matches.map(match => match.id));
           if (!visibleMatchIds.has(state.selectedMatchId)) {
             state.selectedMatchId = state.projectMatches.matches[0]?.id || null;
