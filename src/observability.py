@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from typing import Any
 
 from fastapi import Request
+from fastapi.responses import JSONResponse
 
 _request_id: ContextVar[str] = ContextVar("request_id", default="-")
 
@@ -19,7 +20,7 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
-            "request_id": _request_id.get(),
+            "request_id": getattr(record, "request_id", _request_id.get()),
         }
         for key in ("method", "path", "status_code", "duration_ms"):
             value = getattr(record, key, None)
@@ -51,7 +52,13 @@ async def request_logging_middleware(request: Request, call_next):
         status_code = response.status_code
     except Exception:
         status_code = 500
-        raise
+        response = JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Internal server error",
+                "request_id": request_id,
+            },
+        )
     finally:
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
         logging.getLogger("ace.api").info(
@@ -61,6 +68,7 @@ async def request_logging_middleware(request: Request, call_next):
                 "path": request.url.path,
                 "status_code": status_code,
                 "duration_ms": duration_ms,
+                "request_id": request_id,
             },
         )
         _request_id.reset(token)
