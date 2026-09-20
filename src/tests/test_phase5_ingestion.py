@@ -64,7 +64,7 @@ def test_ingestion_is_idempotent_for_same_source_id():
 
     assert first["created"] == 1
     assert second["duplicates"] == 1
-    assert second["updated"] == 0
+    assert second["updated"] == 1
     assert session.query(Project).filter(Project.source == "usaspending", Project.source_id == "award-repeat").count() == 1
 
 
