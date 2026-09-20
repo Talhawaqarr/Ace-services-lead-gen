@@ -8,7 +8,7 @@ from typing import Any
 from src.providers.contracts import OpportunityProvider
 
 
-class SAMGovProvider:
+class SAMGovProvider(OpportunityProvider):
     """Local, deterministic SAM.gov-shaped opportunity provider.
 
     This project does not perform live SAM.gov API calls. The fixture is synthetic and
