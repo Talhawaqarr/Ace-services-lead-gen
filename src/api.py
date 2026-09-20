@@ -21,7 +21,7 @@ from src.pipeline.service import run_local_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
-from src.opportunity.service import opportunity_payload, qualifies_opportunity, parse_opportunity_datetime
+from src.opportunity.service import opportunity_payload, qualifies_opportunity
 
 configure_logging()
 app = FastAPI(title="ACE Services Review API", version="0.6.0")
