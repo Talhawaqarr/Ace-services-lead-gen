@@ -57,9 +57,9 @@ def build_outreach_draft(session: Session, match_id: str, actor: str = "local-de
     body = (
         f"Hi {contractor.company_name},\n\n"
         f"I’m reaching out regarding {project.name} in {location}. "
-        f"ACE Services provides construction estimating and quantity takeoff support, including {_trade_text(project)}.\\n\\n"
+        f"ACE Services provides construction estimating and quantity takeoff support, including {_trade_text(project)}.\n\n"
         "If your team needs additional estimating capacity for this opportunity, we can review the plans and provide a bid-ready estimate. "
-        "Reply to this email if you’d like to discuss the project and next steps.\\n\\n"
+        "Reply to this email if you’d like to discuss the project and next steps.\n\n"
         "Best,\nACE Services"
     )
     draft = OutreachDraft(
