@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ace_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ace-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ace_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ace_dev
+      REDIS_URL: redis://localhost:6379/0
+      INGESTION_MODE: fixture
+      EMAIL_PROVIDER: mock
+      LLM_PROVIDER: mock
+      DRY_RUN: "true"
+      MAX_EMAILS_PER_HOUR: "100"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  ace-postgres-data:
