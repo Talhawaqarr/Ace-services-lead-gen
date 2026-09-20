@@ -20,8 +20,11 @@ from src.providers.usaspending import USASpendingProvider
 from src.pipeline.service import run_local_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
+from src.observability import configure_logging, request_logging_middleware
 
+configure_logging()
 app = FastAPI(title="ACE Services Review API", version="0.6.0")
+app.middleware("http")(request_logging_middleware)
 app.middleware("http")(api_auth_middleware)
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 
