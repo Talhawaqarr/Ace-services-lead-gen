@@ -76,6 +76,12 @@ class Project(Base, TimestampMixin):
     estimated_value = Column(Float)
     provenance = Column(JSON)
 
+    __table_args__ = (
+        UniqueConstraint("source", "source_id", name="uq_projects_source_source_id"),
+        Index("ix_projects_source", "source"),
+        Index("ix_projects_source_id", "source_id"),
+    )
+
 
 class Contractor(Base, TimestampMixin):
     __tablename__ = "contractors"
@@ -90,6 +96,12 @@ class Contractor(Base, TimestampMixin):
     trades = Column(JSON)
     primary_email = Column(String)
     provenance = Column(JSON)
+
+    __table_args__ = (
+        UniqueConstraint("source", "source_id", name="uq_contractors_source_source_id"),
+        Index("ix_contractors_source", "source"),
+        Index("ix_contractors_source_id", "source_id"),
+    )
 
 
 class MatchRecord(Base, TimestampMixin):
