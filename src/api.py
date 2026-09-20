@@ -22,7 +22,7 @@ from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
 from src.opportunity.service import opportunity_payload, qualifies_opportunity
-from src.outreach.service import build_outreach_draft
+from src.outreach.service import build_outreach_draft, list_outreach_draft_audits, set_outreach_draft_status
 
 configure_logging()
 app = FastAPI(title="ACE Services Review API", version="0.6.0")
@@ -500,6 +500,58 @@ def get_outreach_draft(match_id: str) -> OutreachDraftResponse:
             raise HTTPException(status_code=404, detail="Outreach draft not found")
 
         return OutreachDraftResponse(**_outreach_draft_payload(draft))
+
+
+@app.post("/outreach-drafts/{draft_id}/status", response_model=OutreachDraftResponse)
+def update_outreach_draft_status(draft_id: str, payload: ReviewRequest) -> OutreachDraftResponse:
+    with SessionLocal() as session:
+        try:
+            normalized = str(uuid.UUID(draft_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid draft id") from exc
+
+        try:
+            draft = set_outreach_draft_status(
+                session,
+                normalized,
+                payload.status,
+                actor=payload.actor or "local-dev",
+                source=payload.source or "local-dev",
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        session.commit()
+        return OutreachDraftResponse(**_outreach_draft_payload(draft))
+
+
+@app.get("/outreach-drafts/{draft_id}/reviews", response_model=list[dict[str, Any]])
+def get_outreach_draft_reviews(draft_id: str) -> list[dict[str, Any]]:
+    with SessionLocal() as session:
+        try:
+            normalized = str(uuid.UUID(draft_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid draft id") from exc
+
+        try:
+            audits = list_outreach_draft_audits(session, normalized)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        return [
+            {
+                "id": str(audit.id),
+                "draft_id": str(audit.draft_id),
+                "previous_status": audit.previous_status,
+                "new_status": audit.new_status,
+                "actor": audit.actor,
+                "source": audit.source,
+                "created_at": audit.created_at.isoformat() if audit.created_at else None,
+            }
+            for audit in audits
+        ]
 
 
 @app.post("/matches/{match_id}/review", response_model=dict[str, Any])
