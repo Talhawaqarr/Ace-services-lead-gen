@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from src.api import app
 from src.db import SessionLocal
-from src.models.core import Contractor, MatchRecord, Project
+from src.models.core import Contractor, MatchRecord, MatchReviewAudit, Project
 
 
 client = TestClient(app)
@@ -15,7 +15,10 @@ def _cleanup_source(source: str) -> None:
     try:
         project_ids = [row.id for row in session.query(Project.id).filter(Project.source == source).all()]
         if project_ids:
-            session.query(MatchRecord).filter(MatchRecord.project_id.in_(project_ids)).delete(synchronize_session=False)
+            match_ids = [row.id for row in session.query(MatchRecord.id).filter(MatchRecord.project_id.in_(project_ids)).all()]
+            if match_ids:
+                session.query(MatchReviewAudit).filter(MatchReviewAudit.match_id.in_(match_ids)).delete(synchronize_session=False)
+                session.query(MatchRecord).filter(MatchRecord.id.in_(match_ids)).delete(synchronize_session=False)
         session.query(Project).filter(Project.source == source).delete(synchronize_session=False)
         session.query(Contractor).filter(Contractor.source == source).delete(synchronize_session=False)
         session.commit()
