@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
+import httpx
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
@@ -16,7 +17,7 @@ from src.db import SessionLocal
 from src.ingestion.service import ingest_source_records
 from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, OutreachDraft, OutreachQueueItem, Project, RawProject
 from src.providers.samgov import SAMGovProvider
-from src.providers.live_samgov import LiveSAMGovProvider
+from src.providers.live_samgov import LiveSAMGovProvider, SAMGovRateLimitError
 from src.providers.usaspending import USASpendingProvider
 from src.pipeline.service import _project_payload, discover_contractors, run_local_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
@@ -712,7 +713,23 @@ def run_ingestion(source: str) -> dict[str, Any]:
         provider = providers[source]()
         if source == "samgov" and get_settings().ingestion_mode == "samgov":
             provider = LiveSAMGovProvider(get_settings().samgov_api_key or "")
-        summary = ingest_source_records(session, provider, source_name=source)
-        session.commit()
+        try:
+            summary = ingest_source_records(session, provider, source_name=source)
+            session.commit()
+        except SAMGovRateLimitError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=429,
+                detail="SAM.gov API rate limit reached. No records were committed; wait for the quota reset before retrying.",
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=502,
+                detail=f"Upstream {source} API request failed with HTTP {exc.response.status_code}",
+            ) from exc
+        except Exception:
+            session.rollback()
+            raise
         summary["source"] = source
         return summary
