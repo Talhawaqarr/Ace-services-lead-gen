@@ -1,5 +1,9 @@
 # ACE Services — Demo Completion Plan
 
+> **Implementation status:** code and demo documentation are complete on branch `demo/complete`. The final external verification step is the Dockerized test run; a CI workflow has been added for that purpose.
+>
+> **Review:** Draft PR #43 targets `phase52/operational-hardening`.
+
 ## Goal
 
 Turn the current ACE Services backend + review workspace into one convincing, repeatable end-to-end demo:
