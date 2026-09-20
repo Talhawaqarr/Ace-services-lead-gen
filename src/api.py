@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from src.config import get_settings
 from src.db import SessionLocal
 from src.ingestion.service import ingest_source_records
 from src.models.core import Contractor, IngestionRun, MatchRecord, Project, RawProject
@@ -88,6 +89,20 @@ def index() -> HTMLResponse:
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/config")
+def runtime_config() -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "app_env": settings.app_env,
+        "ingestion_mode": settings.ingestion_mode,
+        "email_provider": settings.email_provider,
+        "llm_provider": settings.llm_provider,
+        "dry_run": settings.dry_run,
+        "max_emails_per_hour": settings.max_emails_per_hour,
+        "samgov_api_key_configured": settings.samgov_api_key is not None,
+    }
 
 
 
@@ -366,6 +381,7 @@ def list_ingestion_sources() -> dict[str, Any]:
                 "type": "fixture-backed-public-source",
                 "requires_credentials": False,
                 "status": "local-only",
+                "configured_mode": get_settings().ingestion_mode,
             },
             {
                 "name": "samgov",
