@@ -16,6 +16,7 @@ from src.db import SessionLocal
 from src.ingestion.service import ingest_source_records
 from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAudit, OutreachDraft, OutreachQueueItem, Project, RawProject
 from src.providers.samgov import SAMGovProvider
+from src.providers.live_samgov import LiveSAMGovProvider
 from src.providers.usaspending import USASpendingProvider
 from src.pipeline.service import _project_payload, discover_contractors, run_local_fixture_pipeline
 from src.review.service import generate_matches, set_review_status
@@ -709,6 +710,8 @@ def run_ingestion(source: str) -> dict[str, Any]:
 
     with SessionLocal() as session:
         provider = providers[source]()
+        if source == "samgov" and get_settings().ingestion_mode == "samgov":
+            provider = LiveSAMGovProvider(get_settings().samgov_api_key or "")
         summary = ingest_source_records(session, provider, source_name=source)
         session.commit()
         summary["source"] = source
