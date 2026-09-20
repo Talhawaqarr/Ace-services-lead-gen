@@ -22,6 +22,24 @@ class RawProject(Base, TimestampMixin):
     )
 
 
+class RawContractor(Base, TimestampMixin):
+    __tablename__ = "raw_contractors"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source = Column(String, nullable=False)
+    source_id = Column(String, nullable=False)
+    fetched_at = Column(DateTime, nullable=False)
+    raw_payload = Column(JSON, nullable=False)
+    status = Column(String, nullable=False, default="RECEIVED")
+    error_detail = Column(String)
+
+    __table_args__ = (
+        UniqueConstraint("source", "source_id", name="uq_raw_contractors_source_source_id"),
+        Index("ix_raw_contractors_source", "source"),
+        Index("ix_raw_contractors_status", "status"),
+    )
+
+
 class IngestionRun(Base, TimestampMixin):
     __tablename__ = "ingestion_runs"
 

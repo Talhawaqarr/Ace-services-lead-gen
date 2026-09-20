@@ -5,12 +5,13 @@ from pathlib import Path
 from src.db import get_session
 from src.ingestion.service import ingest_contractors
 from src.matching.engine import match_project
-from src.models.core import Contractor, IngestionRun, RawProject
+from src.models.core import Contractor, IngestionRun, RawContractor, RawProject
 from src.providers.samgov_contractors import SAMGovContractorProvider
 
 
 def _reset_contractors(session):
     session.query(Contractor).filter(Contractor.source == "samgov").delete(synchronize_session=False)
+    session.query(RawContractor).filter(RawContractor.source == "samgov").delete(synchronize_session=False)
     session.query(RawProject).filter(RawProject.source == "samgov").delete(synchronize_session=False)
     session.query(IngestionRun).filter(IngestionRun.source == "samgov").delete(synchronize_session=False)
     session.commit()
@@ -82,7 +83,7 @@ def test_phase11_invalid_missing_source_identity_is_rejected():
     summary = ingest_contractors(session, provider, source_name="samgov")
 
     assert summary["rejected"] == 1
-    raw = session.query(RawProject).filter(RawProject.source == "samgov").one()
+    raw = session.query(RawContractor).filter(RawContractor.source == "samgov").one()
     assert raw.status == "REJECTED"
     assert "source_id" in (raw.error_detail or "")
 
@@ -119,7 +120,7 @@ def test_phase11_raw_payload_and_provenance_are_preserved():
 
     ingest_contractors(session, provider, source_name="samgov")
 
-    raw = session.query(RawProject).filter(RawProject.source == "samgov", RawProject.source_id == "SAMC-1001").one()
+    raw = session.query(RawContractor).filter(RawContractor.source == "samgov", RawContractor.source_id == "SAMC-1001").one()
     assert raw.raw_payload["source_id"] == "SAMC-1001"
     assert raw.raw_payload["notes"] == "SYNTHETIC TEST DATA"
     contractor = session.query(Contractor).filter(Contractor.source == "samgov", Contractor.source_id == "SAMC-1001").one()
@@ -231,3 +232,32 @@ def test_phase11_no_live_network_calls_are_present():
     assert info["synthetic"] is True
     assert info["source"] == "samgov"
     assert "http" not in str(info).lower()
+
+
+def test_phase11_contractor_identity_does_not_use_samgov_solicitation_number():
+    session = get_session()
+    _reset_contractors(session)
+    provider = SAMGovContractorProvider()
+    provider.records = [{
+        "source": "samgov",
+        "source_id": "SAMC-TEST-IDENTITY",
+        "entity_id": "SAMC-ENTITY-9001",
+        "solicitationNumber": "SOL-OPPORTUNITY-9999",
+        "company_name": "Identity Separation Builders",
+        "state": "CA",
+        "trade": "general",
+        "notes": "SYNTHETIC TEST DATA",
+    }]
+
+    summary = ingest_contractors(session, provider, source_name="samgov")
+
+    assert summary["accepted"] == 1
+    contractor = session.query(Contractor).filter(
+        Contractor.source == "samgov",
+        Contractor.source_id == "SAMC-ENTITY-9001",
+    ).one()
+    assert contractor.provenance["samgov_entity_id"] == "SAMC-ENTITY-9001"
+    assert session.query(Contractor).filter(
+        Contractor.source == "samgov",
+        Contractor.source_id == "SOL-OPPORTUNITY-9999",
+    ).count() == 0
