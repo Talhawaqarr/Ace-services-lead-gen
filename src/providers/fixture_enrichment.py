@@ -11,6 +11,8 @@ from src.providers.contracts import ContractorEnrichmentProvider
 class FixtureContractorEnrichmentProvider(ContractorEnrichmentProvider):
     """Offline enrichment source using explicitly synthetic contact records."""
 
+    source_priority = 10
+
     def __init__(self, fixture_path: str | None = None):
         base = Path(__file__).resolve().parents[2]
         self.source_name = "fixture-enrichment"
@@ -31,9 +33,10 @@ class FixtureContractorEnrichmentProvider(ContractorEnrichmentProvider):
             return None
         result = dict(row)
         result["source"] = self.source_name
+        result["source_priority"] = int(result.get("source_priority", self.source_priority))
         result["fetched_at"] = datetime.now(timezone.utc).isoformat()
         result["synthetic"] = True
         return result
 
     def health_check(self) -> dict[str, Any]:
-        return {"status": "ok", "info": {"source": self.source_name, "fixture": str(self.fixture_path), "synthetic": True}}
+        return {"status": "ok", "info": {"source": self.source_name, "fixture": str(self.fixture_path), "synthetic": True, "source_priority": self.source_priority}}
