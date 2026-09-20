@@ -62,6 +62,7 @@ class ContractorSummary(BaseModel):
     company_name: str
     city: str | None = None
     state: str | None = None
+    primary_email: str | None = None
 
 
 class MatchEvidence(BaseModel):
@@ -77,6 +78,7 @@ class MatchItem(BaseModel):
     project_id: str
     contractor_id: str
     contractor_name: str
+    contractor_email: str | None = None
     ranking: int
     match_score: float
     confidence: str
@@ -313,6 +315,7 @@ def get_project_matches(
                     project_id=str(row.project_id),
                     contractor_id=str(row.contractor_id),
                     contractor_name=contractor.company_name,
+                    contractor_email=contractor.primary_email,
                     ranking=row.ranking,
                     match_score=float(row.match_score),
                     confidence=row.confidence,
@@ -384,6 +387,7 @@ def get_match_detail(match_id: str) -> dict[str, Any]:
                 "company_name": contractor.company_name if contractor else None,
                 "city": contractor.city if contractor else None,
                 "state": contractor.state if contractor else None,
+                "primary_email": contractor.primary_email if contractor else None,
             },
             "match": {
                 "project_id": str(row.project_id),
