@@ -20,7 +20,9 @@ class RawProject(Base, TimestampMixin):
         Index("ix_raw_projects_source", "source"),
         Index("ix_raw_projects_status", "status"),
     )
-\n\nclass RawContractor(Base, TimestampMixin):
+
+
+class RawContractor(Base, TimestampMixin):
     __tablename__ = "raw_contractors"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
