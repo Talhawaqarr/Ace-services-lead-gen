@@ -341,7 +341,12 @@ def _contractor_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | N
 
 
 def ingest_source_records(session: Session, provider: Any, source_name: str | None = None) -> dict[str, Any]:
-    records = provider.list_projects({}) if hasattr(provider, "list_projects") else []
+    provider_filters: dict[str, Any] = {}
+    if (source_name or getattr(provider, "source_name", "unknown")).strip().lower() == "samgov":
+        # Keep live ingestion focused on the construction NAICS family.
+        provider_filters = {"naics": "23", "limit": 1000}
+
+    records = provider.list_projects(provider_filters) if hasattr(provider, "list_projects") else []
     payloads = records.get("projects", []) if isinstance(records, dict) else records
 
     source = source_name or getattr(provider, "source_name", "unknown")
@@ -372,6 +377,13 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
             existing = _build_raw_record(source, raw, "RECEIVED")
             session.add(existing)
             session.flush()
+
+        if source == "samgov" and _samgov_construction_relevance(raw) == "unlikely":
+            existing.status = "REJECTED"
+            existing.error_detail = "Opportunity does not meet construction relevance boundary"
+            summary.rejected += 1
+            session.flush()
+            continue
 
         normalized, error = _project_record_for(raw)
         if error:

@@ -9,6 +9,10 @@ import httpx
 from src.providers.contracts import OpportunityProvider
 
 
+class SAMGovRateLimitError(RuntimeError):
+    """Raised when SAM.gov refuses a request after bounded retries."""
+
+
 class LiveSAMGovProvider(OpportunityProvider):
     """Live SAM.gov Contract Opportunities API provider.
 
@@ -66,6 +70,10 @@ class LiveSAMGovProvider(OpportunityProvider):
 
             if response.status_code == 429 or 500 <= response.status_code < 600:
                 if attempts >= self.max_retries:
+                    if response.status_code == 429:
+                        raise SAMGovRateLimitError(
+                            "SAM.gov API rate limit reached after bounded retries"
+                        )
                     response.raise_for_status()
                 retry_after = response.headers.get("Retry-After")
                 try:
@@ -218,4 +226,4 @@ class LiveSAMGovProvider(OpportunityProvider):
         }
 
 
-__all__ = ["LiveSAMGovProvider"]
+__all__ = ["LiveSAMGovProvider", "SAMGovRateLimitError"]
