@@ -20,7 +20,7 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
-            "request_id": _request_id.get(),
+            "request_id": getattr(record, "request_id", _request_id.get()),
         }
         for key in ("method", "path", "status_code", "duration_ms"):
             value = getattr(record, key, None)
@@ -68,6 +68,7 @@ async def request_logging_middleware(request: Request, call_next):
                 "path": request.url.path,
                 "status_code": status_code,
                 "duration_ms": duration_ms,
+                "request_id": request_id,
             },
         )
         _request_id.reset(token)
