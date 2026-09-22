@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -43,6 +43,7 @@ class IngestionSummary:
     errors: int = 0
     created: int = 0
     updated: int = 0
+    source_ids: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -67,6 +68,20 @@ def _normalize_city(value: Any) -> str | None:
     if cleaned is None:
         return None
     return cleaned.title()
+
+
+def _normalize_active_status(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return "ACTIVE" if value else "INACTIVE"
+    cleaned = _normalized_text(value)
+    if cleaned is None:
+        return None
+    normalized = cleaned.lower()
+    if normalized in {"yes", "true", "1", "active"}:
+        return "ACTIVE"
+    if normalized in {"no", "false", "0", "inactive", "archived"}:
+        return "INACTIVE"
+    return cleaned
 
 
 def _normalize_date(value: Any) -> str | None:
@@ -199,10 +214,9 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     response_deadline = _normalize_date(raw.get("response_deadline") or raw.get("responseDeadline") or raw.get("reponseDeadLine"))
     bid_date = _normalize_date(raw.get("bid_date") or raw.get("bidDate") or posted_date)
     raw_active = raw.get("active")
-    if isinstance(raw_active, bool):
-        status = "ACTIVE" if raw_active else "INACTIVE"
-    else:
-        status = _normalized_text(raw.get("status") or raw_active or raw.get("type"))
+    status = _normalize_active_status(raw_active if raw_active is not None else raw.get("status"))
+    if status is None and source != "samgov":
+        status = _normalized_text(raw.get("type"))
     description = _normalized_text(raw.get("description"))
     source_url = _normalized_text(raw.get("uiLink") or raw.get("source_url"))
     estimated_value = _normalize_numeric(raw.get("estimated_value") or raw.get("estimatedValue"))
@@ -340,19 +354,30 @@ def _contractor_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | N
     return normalized, None
 
 
-def ingest_source_records(session: Session, provider: Any, source_name: str | None = None) -> dict[str, Any]:
-    provider_filters: dict[str, Any] = {}
+def ingest_source_records(
+    session: Session,
+    provider: Any,
+    source_name: str | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    provider_filters: dict[str, Any] = dict(filters or {})
     if (source_name or getattr(provider, "source_name", "unknown")).strip().lower() == "samgov":
         # Keep live ingestion focused on construction and bounded to one page by default.
         from src.config import get_settings
         settings = get_settings()
-        provider_filters = {
-            "naics": "23",
-            "limit": settings.samgov_page_limit,
-        }
+        provider_filters.setdefault("naics", "23")
+        provider_filters.setdefault("limit", settings.samgov_page_limit)
 
     records = provider.list_projects(provider_filters) if hasattr(provider, "list_projects") else []
     payloads = records.get("projects", []) if isinstance(records, dict) else records
+
+    fetched_source_ids: list[str] = []
+    for raw in payloads:
+        if not isinstance(raw, dict):
+            continue
+        value = _effective_source_id(raw)
+        if value:
+            fetched_source_ids.append(value)
 
     source = source_name or getattr(provider, "source_name", "unknown")
     run = IngestionRun(
@@ -373,6 +398,7 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
         errors=0,
         created=0,
         updated=0,
+        source_ids=fetched_source_ids,
     )
 
     for raw in payloads:
@@ -383,13 +409,6 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
             session.add(existing)
             session.flush()
 
-        if source == "samgov" and _samgov_construction_relevance(raw) == "unlikely":
-            existing.status = "REJECTED"
-            existing.error_detail = "Opportunity does not meet construction relevance boundary"
-            summary.rejected += 1
-            session.flush()
-            continue
-
         normalized, error = _project_record_for(raw)
         if error:
             existing.status = "REJECTED"
@@ -399,34 +418,39 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
             session.flush()
             continue
 
+        if source == "samgov" and _samgov_construction_relevance(raw) == "unlikely":
+            existing.status = "REJECTED"
+            existing.error_detail = "Opportunity does not meet construction relevance boundary"
+            summary.rejected += 1
+            session.flush()
+            continue
+
         canonical = session.execute(select(Project).where(Project.source == source, Project.source_id == source_id)).scalar_one_or_none()
         if canonical is not None:
             existing.status = "DUPLICATE"
+            existing.fetched_at = datetime.now(timezone.utc)
+            existing.raw_payload = raw
+            existing.error_detail = None
             summary.duplicates += 1
-            if canonical.name is None and normalized.get("name"):
-                canonical.name = normalized["name"]
-            if canonical.city is None and normalized.get("city"):
-                canonical.city = normalized["city"]
-            if canonical.state is None and normalized.get("state"):
-                canonical.state = normalized["state"]
-            if canonical.bid_date is None and normalized.get("bid_date"):
-                canonical.bid_date = normalized["bid_date"]
-            if canonical.posted_date is None and normalized.get("posted_date"):
-                canonical.posted_date = normalized["posted_date"]
-            if canonical.response_deadline is None and normalized.get("response_deadline"):
-                canonical.response_deadline = normalized["response_deadline"]
-            if canonical.status is None and normalized.get("status"):
-                canonical.status = normalized["status"]
-            if canonical.description is None and normalized.get("description"):
-                canonical.description = normalized["description"]
-            if canonical.source_url is None and normalized.get("source_url"):
-                canonical.source_url = normalized["source_url"]
-            if canonical.estimated_value is None and normalized.get("estimated_value") is not None:
-                canonical.estimated_value = normalized["estimated_value"]
-            if canonical.trades in (None, []) and normalized.get("trades"):
-                canonical.trades = normalized["trades"]
-            if canonical.provenance is None:
-                canonical.provenance = normalized.get("provenance")
+
+            # Source-derived fields are mutable. A notice can be amended after
+            # first ingestion, so refresh them on subsequent syncs rather than
+            # freezing the first observed version in the canonical record.
+            canonical.name = normalized["name"]
+            canonical.city = normalized.get("city")
+            canonical.state = normalized.get("state")
+            canonical.latitude = normalized.get("latitude")
+            canonical.longitude = normalized.get("longitude")
+            canonical.trades = normalized.get("trades")
+            canonical.bid_date = normalized.get("bid_date")
+            canonical.posted_date = normalized.get("posted_date")
+            canonical.response_deadline = normalized.get("response_deadline")
+            canonical.status = normalized.get("status")
+            canonical.description = normalized.get("description")
+            canonical.source_url = normalized.get("source_url")
+            canonical.estimated_value = normalized.get("estimated_value")
+            canonical.provenance = normalized.get("provenance")
+            summary.updated += 1
             session.flush()
             continue
 
@@ -465,9 +489,23 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
     return summary.as_dict()
 
 
-def ingest_contractors(session: Session, provider: Any, source_name: str | None = None) -> dict[str, Any]:
-    records = provider.list_contractors({}) if hasattr(provider, "list_contractors") else []
+def ingest_contractors(
+    session: Session,
+    provider: Any,
+    source_name: str | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    provider_filters: dict[str, Any] = dict(filters or {})
+    records = provider.list_contractors(provider_filters) if hasattr(provider, "list_contractors") else []
     payloads = records.get("contractors", []) if isinstance(records, dict) else records
+
+    fetched_source_ids: list[str] = []
+    for raw in payloads:
+        if not isinstance(raw, dict):
+            continue
+        value = _effective_contractor_source_id(raw)
+        if value:
+            fetched_source_ids.append(value)
 
     source = source_name or getattr(provider, "source_name", "unknown")
     run = IngestionRun(
@@ -488,6 +526,7 @@ def ingest_contractors(session: Session, provider: Any, source_name: str | None 
         errors=0,
         created=0,
         updated=0,
+        source_ids=fetched_source_ids,
     )
 
     for raw in payloads:

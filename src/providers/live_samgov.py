@@ -16,9 +16,9 @@ class SAMGovRateLimitError(RuntimeError):
 class LiveSAMGovProvider(OpportunityProvider):
     """Live SAM.gov Contract Opportunities API provider.
 
-    Uses the official public Contract Opportunities API. The provider can
-    transparently paginate a complete sync while retaining page-token behavior
-    for callers that need one page at a time.
+    Uses the official public Contract Opportunities API. Pagination is
+    bounded by max_pages for predictable request budgets while retaining
+    page-token behavior for callers that need one page at a time.
     """
 
     source_name = "samgov"
@@ -177,11 +177,11 @@ class LiveSAMGovProvider(OpportunityProvider):
         next_token = first["next_page_token"]
         pages_fetched = 1
 
+        truncated = False
         while next_token is not None:
             if pages_fetched >= self.max_pages:
-                raise RuntimeError(
-                    f"SAM.gov pagination exceeded max_pages={self.max_pages}"
-                )
+                truncated = True
+                break
             page = self._list_page(filters, next_token)
             projects.extend(page["projects"])
             next_token = page["next_page_token"]
@@ -189,6 +189,7 @@ class LiveSAMGovProvider(OpportunityProvider):
 
         meta["pages_fetched"] = pages_fetched
         meta["records_returned"] = len(projects)
+        meta["pagination_truncated"] = truncated
         return {
             "projects": projects,
             "next_page_token": None,

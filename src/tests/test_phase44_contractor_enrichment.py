@@ -37,18 +37,30 @@ def test_enrichment_fills_missing_fields_and_is_idempotent(tmp_path):
     assert len(contractor.provenance["enrichment_history"]) == 2
 
 
-def test_enrichment_does_not_overwrite_existing_contact_data(tmp_path):
+def test_enrichment_replaces_unranked_contact_with_higher_priority_source(tmp_path):
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
-    contractor = Contractor(company_name="Example", normalized_name="Example", source="samgov", source_id="ENT-1", primary_email="existing@example.com")
+
+    contractor = Contractor(
+        company_name="Example",
+        normalized_name="Example",
+        source="samgov",
+        source_id="ENT-1",
+        primary_email="existing@example.com",
+    )
     session.add(contractor)
     session.commit()
 
     fixture = tmp_path / "enrichment.json"
-    fixture.write_text('{"contractors":[{"source_id":"ENT-1","primary_email":"new@example.com","primary_phone":"+1 555 0102"}]}', encoding="utf-8")
+    fixture.write_text(
+        '{"contractors":[{"source_id":"ENT-1","primary_email":"new@example.com","primary_phone":"+1 555 0102"}]}',
+        encoding="utf-8",
+    )
     provider = FixtureContractorEnrichmentProvider(str(fixture))
 
-    enrich_contractor(session, contractor.id, provider)
-    assert contractor.primary_email == "existing@example.com"
+    result = enrich_contractor(session, contractor.id, provider)
+
+    assert result["updated_fields"] == ["primary_email", "primary_phone"]
+    assert contractor.primary_email == "new@example.com"
     assert contractor.primary_phone == "+1 555 0102"

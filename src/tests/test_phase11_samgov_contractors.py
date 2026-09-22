@@ -1,4 +1,4 @@
-import json
+﻿import json
 import uuid
 from pathlib import Path
 
@@ -67,7 +67,7 @@ def test_phase11_missing_optional_fields_are_handled_without_failing_record():
     assert contractor.company_name == "Westside Renovation Group"
     assert contractor.city is None
     assert contractor.state is None
-    assert contractor.primary_email is None
+    assert contractor.primary_email == "estimating@westside-renovation.example"
     assert contractor.trades in (None, [])
     assert summary["accepted"] >= 3
 
@@ -149,7 +149,7 @@ def test_phase11_normalization_company_state_trade_and_email():
     assert contractor.primary_email == "bid@blueoakconstruction.com"
 
 
-def test_phase11_future_fields_remain_outside_canonical_contractor_model():
+def test_phase11_contact_fields_are_canonical_contractor_fields():
     session = get_session()
     _reset_contractors(session)
     provider = SAMGovContractorProvider()
@@ -167,11 +167,14 @@ def test_phase11_future_fields_remain_outside_canonical_contractor_model():
         "state",
         "trades",
         "primary_email",
+            "website",
+            "primary_phone",
         "provenance",
         "created_at",
         "updated_at",
     }
-    assert "website" not in contractor.__dict__
+    assert contractor.website == "https://northvalleybuild.com"
+    assert contractor.primary_phone == "+1-555-0100"
     assert contractor.provenance["raw_payload"]["website"] == "https://northvalleybuild.com"
 
 
@@ -266,3 +269,7 @@ def test_phase11_contractor_identity_does_not_use_samgov_solicitation_number():
         Contractor.source == "samgov",
         Contractor.source_id == "SOL-OPPORTUNITY-9999",
     ).count() == 0
+
+
+
+

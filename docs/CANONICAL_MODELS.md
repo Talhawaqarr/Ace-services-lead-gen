@@ -8,7 +8,7 @@ This is the actual canonical model used by the current implementation in the rep
 
 ### Current `Project` runtime fields
 
-Required runtime fields:
+Runtime fields currently persisted:
 - `id` (uuid)
 - `name` (string)
 - `source` (string) — provider key
@@ -19,11 +19,15 @@ Required runtime fields:
 - `longitude` (float)
 - `trades` (array of strings)
 - `bid_date` (string)
+- `posted_date` (string)
+- `response_deadline` (string)
+- `status` (string; normalized to `ACTIVE` / `INACTIVE` for SAM.gov)
+- `description` (string)
+- `source_url` (string)
 - `estimated_value` (numeric)
 - `provenance` (json)
 
-Optional runtime fields:
-- `primary_email` / contractor contact fields are not part of the active project model; they are represented only in contractor-specific runtime data where relevant.
+These fields are source-derived and may be refreshed when the same `source` + `source_id` is ingested again. Review/audit state lives on match and outreach records rather than on the Project itself.
 
 Actual implementation source:
 - [src/models/core.py](src/models/core.py)
@@ -54,10 +58,8 @@ The following fields are intentionally documented as future or aspirational only
 
 ### Future project fields (NOT CURRENTLY IMPLEMENTED)
 - `date_discovered` (timestamp) — FUTURE
-- `description` (text) — FUTURE
 - `zip` (string) — FUTURE
 - `project_type` (enum) — FUTURE / NOT CURRENTLY IMPLEMENTED
-- `status` (enum) — FUTURE / NOT CURRENTLY IMPLEMENTED
 - `owner` (string) — FUTURE
 - `construction_type` (string) — FUTURE
 - `documents` (jsonb) — FUTURE
