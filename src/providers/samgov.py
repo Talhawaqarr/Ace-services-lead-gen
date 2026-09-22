@@ -42,6 +42,13 @@ class SAMGovProvider(OpportunityProvider):
             state = filters.get("state")
             if state:
                 records = [row for row in records if ((row.get("placeOfPerformance") or {}).get("state") or "").upper() == str(state).upper()]
+            limit = filters.get("limit")
+            if limit is not None:
+                try:
+                    bounded = max(int(limit), 1)
+                except (TypeError, ValueError):
+                    bounded = len(records)
+                records = records[:bounded]
         return {
             "projects": records,
             "next_page_token": None,

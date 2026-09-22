@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -43,6 +43,7 @@ class IngestionSummary:
     errors: int = 0
     created: int = 0
     updated: int = 0
+    source_ids: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -353,19 +354,30 @@ def _contractor_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | N
     return normalized, None
 
 
-def ingest_source_records(session: Session, provider: Any, source_name: str | None = None) -> dict[str, Any]:
-    provider_filters: dict[str, Any] = {}
+def ingest_source_records(
+    session: Session,
+    provider: Any,
+    source_name: str | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    provider_filters: dict[str, Any] = dict(filters or {})
     if (source_name or getattr(provider, "source_name", "unknown")).strip().lower() == "samgov":
         # Keep live ingestion focused on construction and bounded to one page by default.
         from src.config import get_settings
         settings = get_settings()
-        provider_filters = {
-            "naics": "23",
-            "limit": settings.samgov_page_limit,
-        }
+        provider_filters.setdefault("naics", "23")
+        provider_filters.setdefault("limit", settings.samgov_page_limit)
 
     records = provider.list_projects(provider_filters) if hasattr(provider, "list_projects") else []
     payloads = records.get("projects", []) if isinstance(records, dict) else records
+
+    fetched_source_ids: list[str] = []
+    for raw in payloads:
+        if not isinstance(raw, dict):
+            continue
+        value = _effective_source_id(raw)
+        if value:
+            fetched_source_ids.append(value)
 
     source = source_name or getattr(provider, "source_name", "unknown")
     run = IngestionRun(
@@ -386,6 +398,7 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
         errors=0,
         created=0,
         updated=0,
+        source_ids=fetched_source_ids,
     )
 
     for raw in payloads:
@@ -476,9 +489,23 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
     return summary.as_dict()
 
 
-def ingest_contractors(session: Session, provider: Any, source_name: str | None = None) -> dict[str, Any]:
-    records = provider.list_contractors({}) if hasattr(provider, "list_contractors") else []
+def ingest_contractors(
+    session: Session,
+    provider: Any,
+    source_name: str | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    provider_filters: dict[str, Any] = dict(filters or {})
+    records = provider.list_contractors(provider_filters) if hasattr(provider, "list_contractors") else []
     payloads = records.get("contractors", []) if isinstance(records, dict) else records
+
+    fetched_source_ids: list[str] = []
+    for raw in payloads:
+        if not isinstance(raw, dict):
+            continue
+        value = _effective_contractor_source_id(raw)
+        if value:
+            fetched_source_ids.append(value)
 
     source = source_name or getattr(provider, "source_name", "unknown")
     run = IngestionRun(
@@ -499,6 +526,7 @@ def ingest_contractors(session: Session, provider: Any, source_name: str | None 
         errors=0,
         created=0,
         updated=0,
+        source_ids=fetched_source_ids,
     )
 
     for raw in payloads:

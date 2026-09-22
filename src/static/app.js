@@ -1,4 +1,4 @@
-const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '\u0026amp;', '<': '\u0026lt;', '>': '\u0026gt;', '"': '\u0026quot;', "'": '\u0026#39;' }[ch]));
       const state = {
         projects: [],
         selectedProjectId: null,
@@ -10,6 +10,9 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         reviewAudits: {},
         outreachDrafts: {},
         outreachAudits: {},
+        outreachQueues: {},
+        queue: [],
+        demoLimits: null,
         message: null,
         workspaceRequestId: 0,
       };
@@ -66,6 +69,13 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         return map[status] || 'secondary';
       }
 
+      function setDemoStatus(text, type) {
+        const el = document.getElementById('demoStatus');
+        if (!el) return;
+        el.className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'muted';
+        el.textContent = 'Sync status: ' + text;
+      }
+
       function renderWorkspace() {
         const target = document.getElementById('workspace');
         if (!state.selectedProjectId) {
@@ -91,6 +101,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
             <div>
               <h2>${escapeHtml(project.name || 'Unknown project')}</h2>
               <div class="project-meta">${escapeHtml(project.city || 'Unknown')}${project.state ? ', ' + escapeHtml(project.state) : ''} • ${escapeHtml(project.bid_date || 'Unknown')}</div>
+              <div class="project-meta">Qualification: ${project.construction_relevance ? escapeHtml(project.construction_relevance) : 'unknown'} • Status: ${escapeHtml(project.status || 'Unknown')}</div>
             </div>
             <button class="secondary" onclick="refreshProjectMatches()">Refresh</button>
           </div>
@@ -181,8 +192,12 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
                     : state.outreachDrafts[selectedMatch.id]?.error
                       ? '<div class="error">' + escapeHtml(state.outreachDrafts[selectedMatch.id].error) + '</div>'
                       : state.outreachDrafts[selectedMatch.id]
-                        ? '<div class="match-card"><div class="project-meta">Status: ' + escapeHtml(state.outreachDrafts[selectedMatch.id].status) + ' • To: ' + escapeHtml(state.outreachDrafts[selectedMatch.id].recipient_email) + '</div><strong>' + escapeHtml(state.outreachDrafts[selectedMatch.id].subject) + '</strong><pre style="white-space: pre-wrap; font-family: inherit; margin-bottom: 0;">' + escapeHtml(state.outreachDrafts[selectedMatch.id].body) + '</pre><div class="actions">' + (escapeHtml(state.outreachDrafts[selectedMatch.id].status) === 'DRAFT' ? '<button class="approve" onclick="updateOutreachDraftStatus(\'' + state.outreachDrafts[selectedMatch.id].id + '\', \'APPROVED\', \'' + selectedMatch.id + '\')">Approve Draft</button><button class="reject" onclick="updateOutreachDraftStatus(\'' + state.outreachDrafts[selectedMatch.id].id + '\', \'REJECTED\', \'' + selectedMatch.id + '\')">Reject Draft</button>' : escapeHtml(state.outreachDrafts[selectedMatch.id].status) === 'APPROVED' ? '<button class="reject" onclick="updateOutreachDraftStatus(\'' + state.outreachDrafts[selectedMatch.id].id + '\', \'REJECTED\', \'' + selectedMatch.id + '\')">Reject Draft</button>' : '<button class="approve" onclick="updateOutreachDraftStatus(\'' + state.outreachDrafts[selectedMatch.id].id + '\', \'APPROVED\', \'' + selectedMatch.id + '\')">Approve Draft</button>') + '</div></div>'
+                        ? renderOutreachDraft(selectedMatch.id)
                         : '<button class="secondary" onclick="generateOutreachDraft(\'' + selectedMatch.id + '\')">Generate Outreach Draft</button>'}
+                </div>
+                <div>
+                  <div class="section-title">Outreach Draft History</div>
+                  <div id="outreachHistory">${renderOutreachHistory(selectedMatch.id)}</div>
                 </div>
                 <div>
                   <div class="section-title">Review History</div>
@@ -196,6 +211,46 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         `;
 
         target.innerHTML = html;
+      }
+
+      function renderOutreachDraft(matchId) {
+        const draft = state.outreachDrafts[matchId];
+        if (!draft) return '';
+        const queued = state.outreachQueues[draft.id];
+        const status = escapeHtml(draft.status);
+        let actions = '';
+        if (status === 'DRAFT') {
+          actions = `<button class="approve" onclick="updateOutreachDraftStatus('${draft.id}', 'APPROVED', '${matchId}')">Approve Draft</button>` +
+            `<button class="reject" onclick="updateOutreachDraftStatus('${draft.id}', 'REJECTED', '${matchId}')">Reject Draft</button>`;
+        } else if (status === 'APPROVED') {
+          actions = `<button class="approve" onclick="queueOutreachDraft('${draft.id}', '${matchId}')">Queue Draft (NOT SENT)</button>` +
+            `<button class="reject" onclick="updateOutreachDraftStatus('${draft.id}', 'REJECTED', '${matchId}')">Reject Draft</button>`;
+        } else {
+          actions = `<button class="approve" onclick="updateOutreachDraftStatus('${draft.id}', 'APPROVED', '${matchId}')">Approve Draft</button>`;
+        }
+        const deliveryBadge = queued
+          ? '<span class="badge danger">NOT SENT</span>'
+          : '<span class="badge secondary">NOT QUEUED</span>';
+        const queuedDetail = queued
+          ? `<div class="project-meta">Queued at ${escapeHtml(queued.queued_at || 'unknown')} • delivery: ${escapeHtml(queued.provenance?.delivery || 'not-sent')}</div>`
+          : '';
+        return `<div class="match-card">
+          <div class="project-meta">Status: ${status} • To: ${escapeHtml(draft.recipient_email)} ${deliveryBadge}</div>
+          <strong>${escapeHtml(draft.subject)}</strong>
+          <pre style="white-space: pre-wrap; font-family: inherit; margin-bottom: 0;">${escapeHtml(draft.body)}</pre>
+          ${queuedDetail}
+          <div class="actions">${actions}</div>
+        </div>`;
+      }
+
+      function renderOutreachHistory(matchId) {
+        const draft = state.outreachDrafts[matchId];
+        if (!draft) return '<div class="muted">No outreach draft yet.</div>';
+        const audits = state.outreachAudits[draft.id];
+        if (audits?.error) return `<div class="error">${escapeHtml(audits.error)}</div>`;
+        if (!audits) return '<div class="muted">Loading outreach history...</div>';
+        if (!audits.length) return '<div class="muted">No outreach approval history yet.</div>';
+        return audits.map(audit => `<div class="match-card"><strong>${escapeHtml(audit.previous_status || 'DRAFT')} → ${escapeHtml(audit.new_status)}</strong><div class="project-meta">Actor: ${escapeHtml(audit.actor || 'Unknown')} • ${escapeHtml(audit.created_at || 'Unknown time')}</div></div>`).join('');
       }
 
       async function loadProjects() {
@@ -212,6 +267,94 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         } catch (error) {
           state.message = { type: 'error', text: error.message };
           renderProjects();
+          renderWorkspace();
+        }
+      }
+
+      async function loadDemoLimits() {
+        try {
+          const response = await fetch('/pipeline/demo/limits');
+          if (!response.ok) return;
+          state.demoLimits = await readJson(response);
+          const el = document.getElementById('demoLimits');
+          if (el && state.demoLimits) {
+            el.textContent = 'server cap: ' + state.demoLimits.hard_max_records + ' records/page • live ' + (state.demoLimits.live_available ? 'available' : 'unavailable');
+          }
+          const liveBtn = document.getElementById('demoLiveBtn');
+          if (liveBtn && state.demoLimits && !state.demoLimits.live_available) {
+            liveBtn.disabled = true;
+            liveBtn.title = 'Live demo requires INGESTION_MODE=samgov and a SAM.gov API key.';
+          }
+        } catch {
+          /* limits are advisory for the UI */
+        }
+      }
+
+      async function runDemoSync(mode) {
+        setDemoStatus('running ' + mode + ' sync...', 'muted');
+        try {
+          const response = await fetch('/pipeline/demo/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode })
+          });
+          const body = await readJson(response);
+          if (!response.ok) throw new Error(body.detail || 'Demo sync failed');
+          const opps = body.opportunities || {};
+          let summary = 'mode=' + body.mode + ' • fetched=' + (opps.records_fetched ?? 0) + ' • accepted=' + (opps.accepted ?? 0) + ' • qualified=' + (body.qualified_projects ?? 0) + ' • matches=' + (body.matches_generated ?? 0);
+          if (body.empty) summary += ' • no opportunities returned';
+          setDemoStatus(summary, 'success');
+          state.message = { type: 'success', text: 'Demo sync complete: ' + summary };
+          state.selectedProjectId = null;
+          await loadProjects();
+          const firstId = body.projects?.[0]?.id;
+          if (firstId) await selectProject(firstId);
+        } catch (error) {
+          setDemoStatus(error.message, 'error');
+          state.message = { type: 'error', text: error.message };
+          renderWorkspace();
+        }
+      }
+
+      async function loadOutreachQueue() {
+        const target = document.getElementById('outreachQueue');
+        try {
+          const response = await fetch('/outreach-queue');
+          if (!response.ok) throw new Error('Unable to load outreach queue');
+          const items = await readJson(response);
+          state.queue = items;
+          if (!items.length) {
+            target.innerHTML = '<p class="muted">Queue is empty. Approve a match, generate a draft, approve the draft, then queue it.</p>';
+            return;
+          }
+          target.innerHTML = items.map(item => `
+            <div class="match-card">
+              <div class="match-head">
+                <div>
+                  <strong>${escapeHtml(item.subject)}</strong>
+                  <div class="project-meta">To: ${escapeHtml(item.recipient_email)} • Queued: ${escapeHtml(item.queued_at || 'unknown')}</div>
+                </div>
+                <span class="badge danger">NOT SENT</span>
+              </div>
+              <pre style="white-space: pre-wrap; font-family: inherit; margin-bottom: 0;">${escapeHtml(item.body)}</pre>
+            </div>
+          `).join('');
+        } catch (error) {
+          target.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+        }
+      }
+
+      async function queueOutreachDraft(draftId, matchId) {
+        try {
+          const response = await fetch('/outreach-drafts/' + draftId + '/queue', { method: 'POST' });
+          const body = await readJson(response);
+          if (!response.ok) throw new Error(body.detail || 'Unable to queue outreach draft');
+          state.outreachQueues[draftId] = body;
+          state.message = { type: 'success', text: 'Draft queued. Delivery state: NOT SENT.' };
+          await loadOutreachQueue();
+          renderWorkspace();
+        } catch (error) {
+          state.message = { type: 'error', text: error.message };
           renderWorkspace();
         }
       }
@@ -290,6 +433,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
             const body = await readJson(response);
             if (!response.ok) throw new Error(body.detail || 'Unable to load outreach draft');
             state.outreachDrafts[matchId] = body;
+            await loadOutreachDraftReviews(body.id);
           }
         } catch (error) {
           state.outreachDrafts[matchId] = { error: error.message };
@@ -342,6 +486,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
         }
         renderWorkspace();
       }
+
       async function loadMatchReviews(matchId) {
         try {
           const response = await fetch(`/matches/${matchId}/reviews`);
@@ -370,8 +515,9 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
           });
           const body = await readJson(response);
           if (!response.ok) throw new Error(body.detail || 'Review action failed');
-          state.message = { type: 'success', text: `Match marked ${status}.` };
           await refreshProjectMatches();
+          state.message = { type: 'success', text: `Match marked ${status}.` };
+          renderWorkspace();
         } catch (error) {
           state.message = { type: 'error', text: error.message };
           renderWorkspace();
@@ -380,4 +526,6 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({'&
 
       document.getElementById('projectSearch')?.addEventListener('input', renderProjects);
       document.getElementById('stateFilter')?.addEventListener('change', renderProjects);
+      loadDemoLimits();
+      loadOutreachQueue();
       loadProjects();

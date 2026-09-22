@@ -49,3 +49,10 @@
       .pagination { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:14px; }
       button:disabled { opacity:.5; cursor:not-allowed; }
       .project-description { color:var(--muted); margin-top:10px; line-height:1.45; }
+      .demo-bar { margin-top:16px; padding:14px 16px; border:1px solid var(--border); border-radius:12px; background:var(--card); display:grid; gap:10px; }
+      .demo-controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+      .queue-panel { margin-top:20px; }
+      .badge.danger { background:#fff1f0; border-color:#f5b5b1; color:#8a1c1c; }
+      .badge.success { background:#f2fff9; border-color:#bfe8d2; color:#0f5d3d; }
+      .badge.warning { background:#fffaf0; border-color:#f1d58a; color:#7a5200; }
+      .badge.secondary { background:#f4f6fb; }

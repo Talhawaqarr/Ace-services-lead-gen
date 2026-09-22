@@ -9,7 +9,17 @@
   <body>
     <div class="container">
       <div class="header">
-        <h1>ACE Opportunity Review</h1><p class="muted">Qualified construction opportunities → contractor matches → human review → outreach approval.</p>
+        <h1>ACE Opportunity Review</h1>
+        <p class="muted">Qualified construction opportunities → contractor matches → human review → outreach approval → safe demo queue (NOT SENT).</p>
+        <div class="demo-bar" id="demoBar">
+          <div class="demo-controls">
+            <span class="section-title">Demo sync</span>
+            <button class="secondary" id="demoOfflineBtn" onclick="runDemoSync('fixture')">Run offline demo (fixture)</button>
+            <button class="secondary" id="demoLiveBtn" onclick="runDemoSync('live')">Run live demo (bounded SAM.gov)</button>
+            <span class="muted" id="demoLimits"></span>
+          </div>
+          <div id="demoStatus" class="muted">Sync status: idle.</div>
+        </div>
       </div>
       <div class="grid">
         <aside class="panel">
@@ -21,6 +31,15 @@
           <div id="workspace"></div>
         </main>
       </div>
+
+      <section class="panel queue-panel">
+        <div class="workspace-header">
+          <h2>Outreach Queue (demo only — NOT SENT)</h2>
+          <button class="secondary" onclick="loadOutreachQueue()">Refresh queue</button>
+        </div>
+        <p class="muted">Queued drafts are recorded for the demo. No email provider is ever invoked and nothing is delivered.</p>
+        <div id="outreachQueue" class="match-list"><p class="muted">Loading queue...</p></div>
+      </section>
     </div>
 
     <script src="/static/app.js" defer></script>

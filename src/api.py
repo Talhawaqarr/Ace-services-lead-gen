@@ -19,7 +19,13 @@ from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAu
 from src.providers.samgov import SAMGovProvider
 from src.providers.live_samgov import LiveSAMGovProvider, SAMGovRateLimitError
 from src.providers.usaspending import USASpendingProvider
-from src.pipeline.service import _project_payload, discover_contractors, run_qualified_fixture_pipeline
+from src.pipeline.service import (
+    DEMO_HARD_MAX_RECORDS,
+    _project_payload,
+    discover_contractors,
+    run_bounded_demo_pipeline,
+    run_qualified_fixture_pipeline,
+)
 from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
@@ -38,6 +44,20 @@ class ReviewRequest(BaseModel):
     actor: str | None = Field(default="local-dev")
     source: str | None = Field(default="local-dev")
     reason: str | None = None
+
+
+class DemoRunRequest(BaseModel):
+    """Bounded demo sync request.
+
+    ``max_records`` is advisory only: the server always clamps it to
+    DEMO_HARD_MAX_RECORDS. ``query`` may only carry a small allowlisted set of
+    SAM.gov filter keys.
+    """
+
+    mode: Literal["fixture", "live"] = "fixture"
+    max_records: int | None = Field(default=None, ge=1, le=1000)
+    query: dict[str, str] | None = None
+    deadline_within_days: int | None = Field(default=None, ge=1, le=365)
 
 
 class ProjectSummary(BaseModel):
@@ -666,6 +686,68 @@ def run_local_pipeline() -> dict[str, Any]:
         summary = run_qualified_fixture_pipeline(session)
         session.commit()
         return summary
+
+
+@app.get("/pipeline/demo/limits")
+def demo_limits() -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "hard_max_records": DEMO_HARD_MAX_RECORDS,
+        "default_max_records": 5,
+        "ingestion_mode": settings.ingestion_mode,
+        "live_available": settings.ingestion_mode == "samgov",
+        "samgov_api_key_configured": settings.samgov_api_key is not None,
+    }
+
+
+@app.post("/pipeline/demo/run")
+def run_demo_pipeline(payload: DemoRunRequest | None = None) -> dict[str, Any]:
+    """Run one bounded demo sync pass.
+
+    The request is intentionally tiny: a small page of SAM.gov-shaped records
+    is fetched, normalized, qualified, scored, and scoped to only the records
+    touched by this run. The server enforces the maximum request size.
+    """
+    payload = payload or DemoRunRequest()
+    with SessionLocal() as session:
+        try:
+            summary = run_bounded_demo_pipeline(
+                session,
+                mode=payload.mode,
+                query=payload.query,
+                max_records=payload.max_records,
+                deadline_within_days=payload.deadline_within_days,
+            )
+            session.commit()
+        except ValueError as exc:
+            session.rollback()
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except SAMGovRateLimitError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=429,
+                detail="SAM.gov API rate limit reached. No records were committed; wait for the quota reset before retrying.",
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=502,
+                detail=f"Upstream samgov API request failed with HTTP {exc.response.status_code}",
+            ) from exc
+        except Exception:
+            session.rollback()
+            raise
+        return summary
+
+
+@app.get("/outreach-queue", response_model=list[OutreachQueueResponse])
+def list_outreach_queue() -> list[OutreachQueueResponse]:
+    """List the demo outreach queue. Items are never delivered (NOT SENT)."""
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(OutreachQueueItem).order_by(OutreachQueueItem.queued_at.desc(), OutreachQueueItem.id.desc())
+        ).scalars().all()
+        return [OutreachQueueResponse(**_outreach_queue_payload(item)) for item in rows]
 
 
 @app.get("/ingestion/sources")
