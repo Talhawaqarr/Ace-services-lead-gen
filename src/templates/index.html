@@ -1,47 +1,89 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ACE Review Workspace</title>
-    <link rel="stylesheet" href="/static/styles.css" />
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <h1>ACE Opportunity Review</h1>
-        <p class="muted">Qualified construction opportunities → contractor matches → human review → outreach approval → safe demo queue (NOT SENT).</p>
-        <div class="demo-bar" id="demoBar">
-          <div class="demo-controls">
-            <span class="section-title">Demo sync</span>
-            <button class="secondary" id="demoOfflineBtn" onclick="runDemoSync('fixture')">Run offline demo (fixture)</button>
-            <button class="secondary" id="demoLiveBtn" onclick="runDemoSync('live')">Run live demo (bounded SAM.gov)</button>
-            <span class="muted" id="demoLimits"></span>
-          </div>
-          <div id="demoStatus" class="muted">Sync status: idle.</div>
-        </div>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ACE Services — Opportunity Operations</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" aria-label="ACE Services">
+        <span class="brand-mark">ACE</span>
+        <span class="brand-copy">
+          <strong>ACE Services</strong>
+          <span>Opportunity Operations</span>
+        </span>
+      </a>
+      <div class="topbar-actions">
+        <span class="mode mode-subtle" id="syncMode" data-mode="idle">Idle</span>
+        <button class="btn btn-secondary" id="demoOfflineBtn" onclick="runDemoSync('fixture')">Offline demo</button>
+        <button class="btn btn-primary" id="demoLiveBtn" onclick="runDemoSync('live')">Live SAM.gov sync</button>
       </div>
-      <div class="grid">
-        <aside class="panel">
-          <h2>Opportunities</h2>
-          <div class="toolbar"><input id="projectSearch" type="search" placeholder="Search opportunities" /><select id="stateFilter"><option value="">All states</option></select></div><ul id="projectList" class="project-list"></ul>
-        </aside>
-
-        <main class="panel">
-          <div id="workspace"></div>
-        </main>
-      </div>
-
-      <section class="panel queue-panel">
-        <div class="workspace-header">
-          <h2>Outreach Queue (demo only — NOT SENT)</h2>
-          <button class="secondary" onclick="loadOutreachQueue()">Refresh queue</button>
-        </div>
-        <p class="muted">Queued drafts are recorded for the demo. No email provider is ever invoked and nothing is delivered.</p>
-        <div id="outreachQueue" class="match-list"><p class="muted">Loading queue...</p></div>
-      </section>
     </div>
+  </header>
 
-    <script src="/static/app.js" defer></script>
-  </body>
+  <section class="sync-strip" id="syncSection">
+    <div class="sync-inner" id="kpiSection">
+      <div class="sync-status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="demoStatus" role="status" aria-live="polite">Sync status: idle.</span>
+        <span class="limits" id="demoLimits"></span>
+      </div>
+      <dl class="sync-stats" id="syncStats" aria-label="Counts reported by the last sync"></dl>
+    </div>
+  </section>
+
+  <main class="app-shell">
+    <aside class="opportunity-rail" id="opportunitiesSection" aria-labelledby="opportunitiesHeading">
+      <div class="rail-head">
+        <div>
+          <div class="eyebrow">Pipeline</div>
+          <h1 id="opportunitiesHeading">Opportunities</h1>
+        </div>
+        <span class="rail-count" id="opportunityCount">—</span>
+      </div>
+
+      <div class="rail-kpi">
+        <strong id="kpiQualified">—</strong>
+        <span id="kpiQualifiedNote">Not loaded yet</span>
+      </div>
+
+      <div class="filters">
+        <label class="sr-only" for="projectSearch">Search opportunities</label>
+        <input class="field" id="projectSearch" type="search" placeholder="Search opportunities" />
+        <label class="sr-only" for="stateFilter">Filter by state</label>
+        <select class="field" id="stateFilter" aria-label="Filter by state">
+          <option value="">All states</option>
+        </select>
+      </div>
+
+      <ul class="opportunity-list" id="projectList" role="listbox" aria-label="Qualified opportunities"></ul>
+    </aside>
+
+    <section class="workspace-panel">
+      <main class="workspace" id="workspace" aria-label="Selected opportunity"></main>
+    </section>
+  </main>
+
+  <section class="queue-panel" id="queueSection" aria-labelledby="queueHeading">
+    <div class="queue-head">
+      <div>
+        <div class="eyebrow">Outbound workflow</div>
+        <h2 id="queueHeading">Outreach queue</h2>
+      </div>
+      <div class="queue-meta">
+        <span class="badge badge-danger">NOT SENT</span>
+        <button class="btn btn-secondary btn-sm" onclick="loadOutreachQueue()">Refresh</button>
+      </div>
+    </div>
+    <div class="queue-note">Approved drafts are recorded here for review. This demo never sends email.</div>
+    <div class="queue-body" id="outreachQueue" aria-live="polite">
+      <p class="muted">Loading queue…</p>
+    </div>
+  </section>
+
+  <script src="/static/app.js" defer></script>
+</body>
 </html>
