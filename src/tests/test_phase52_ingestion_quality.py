@@ -76,3 +76,89 @@ def test_active_samgov_construction_opportunity_qualifies():
     })
 
     assert qualifies_opportunity(project) is True
+
+
+def _samgov_record(**overrides):
+    payload = {
+        "source": "samgov",
+        "solicitationNumber": "19SA4026C0008",
+        "title": "AWARD NOTICE 19SA4026C0008 CONSTRUCTION OF SIDEWALKS",
+        "naicsCode": "236220",
+        "active": "Yes",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_samgov_place_of_performance_objects_are_flattened_to_names():
+    normalized, error = _project_record_for(
+        _samgov_record(
+            placeOfPerformance={
+                "city": {"Code": "Jeddah", "Name": "Jeddah"},
+                "state": {"Code": "CA", "Name": "California"},
+                "country": {"Code": "SAU", "Name": "SAUDI ARABIA"},
+            }
+        )
+    )
+
+    assert error is None
+    assert normalized["city"] == "Jeddah"
+    assert normalized["state"] == "CA"
+    assert "{" not in normalized["city"]
+
+
+def test_samgov_place_of_performance_string_location_is_unchanged():
+    normalized, error = _project_record_for(
+        _samgov_record(placeOfPerformance={"city": "Oakland", "state": "CA"})
+    )
+
+    assert error is None
+    assert normalized["city"] == "Oakland"
+    assert normalized["state"] == "CA"
+
+
+def test_samgov_place_of_performance_falls_back_to_code_when_name_missing():
+    normalized, error = _project_record_for(
+        _samgov_record(placeOfPerformance={"city": {"Code": "Jeddah"}, "state": {}})
+    )
+
+    assert error is None
+    assert normalized["city"] == "Jeddah"
+    assert normalized["state"] is None
+
+
+def test_samgov_place_of_performance_null_and_missing_values_stay_empty():
+    normalized, error = _project_record_for(
+        _samgov_record(placeOfPerformance={"city": None, "state": {}})
+    )
+
+    assert error is None
+    assert normalized["city"] is None
+    assert normalized["state"] is None
+
+    without_place, error = _project_record_for(_samgov_record())
+
+    assert error is None
+    assert without_place["city"] is None
+    assert without_place["state"] is None
+
+
+def test_samgov_top_level_state_object_is_flattened_and_long_names_trimmed():
+    normalized, error = _project_record_for(
+        _samgov_record(city={"Code": "Oakland", "Name": "Oakland"}, state={"Code": "CA", "Name": "California"})
+    )
+
+    assert error is None
+    assert normalized["city"] == "Oakland"
+    # Existing behaviour for a long state string is kept: take the first word
+    # and keep the two-letter code, so a dict never leaks its repr.
+    assert normalized["state"] == "CA"
+
+    foreign, error = _project_record_for(
+        _samgov_record(city={"Code": "Jeddah", "Name": "Jeddah"}, state={"Code": "02", "Name": "Makkah"})
+    )
+
+    assert error is None
+    assert foreign["city"] == "Jeddah"
+    assert foreign["state"].startswith("MA")
+    assert "{" not in foreign["state"]

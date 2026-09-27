@@ -56,15 +56,33 @@ def _normalized_text(value: Any) -> str | None:
     return cleaned if cleaned else None
 
 
+def _location_token(value: Any) -> str | None:
+    """Flatten a location value that SAM.gov may return as a scalar or an object.
+
+    Live SAM.gov v2 returns ``placeOfPerformance.city``/``.state`` as plain strings
+    for some notices and as ``{"Code": ..., "Name": ...}`` objects for others.
+    Stringifying an object leaks a Python repr such as ``{'Code': 'Jeddah'}`` into
+    the canonical record, so prefer the human-readable ``Name`` and fall back to
+    the ``Code``. Any other shape keeps the previous string behaviour.
+    """
+    if isinstance(value, dict):
+        for key in ("Name", "name", "Code", "code"):
+            token = _normalized_text(value.get(key))
+            if token:
+                return token
+        return None
+    return _normalized_text(value)
+
+
 def _normalize_state(value: Any) -> str | None:
-    cleaned = _normalized_text(value)
+    cleaned = _location_token(value)
     if cleaned is None:
         return None
     return cleaned.upper()[:2]
 
 
 def _normalize_city(value: Any) -> str | None:
-    cleaned = _normalized_text(value)
+    cleaned = _location_token(value)
     if cleaned is None:
         return None
     return cleaned.title()
@@ -222,8 +240,9 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     estimated_value = _normalize_numeric(raw.get("estimated_value") or raw.get("estimatedValue"))
     trades = _derive_project_trades(raw)
 
-    if raw.get("state") and len(str(raw.get("state"))) > 2:
-        state = _normalize_state(raw.get("state").split()[0])
+    raw_state_token = _location_token(raw.get("state"))
+    if raw_state_token and len(raw_state_token) > 2:
+        state = _normalize_state(raw_state_token.split()[0])
 
     if raw.get("bid_date") and str(raw.get("bid_date")).lower() in {"unknown", "n/a"}:
         bid_date = None
@@ -401,6 +420,21 @@ def ingest_source_records(
         source_ids=fetched_source_ids,
     )
 
+    # Snapshot the source ids already stored for this source before the run
+    # starts. A record that already exists in the canonical store is a re-sync
+    # of a known notice, not a within-batch duplicate of this fetch.
+    preexisting_source_ids = {
+        value
+        for value in session.execute(
+            select(RawProject.source_id).where(RawProject.source == source)
+        ).scalars()
+        if value
+    }
+
+    # Source ids already seen in this batch, so a notice that both pre-exists and
+    # repeats within one fetch is still only counted as accepted once.
+    accepted_source_ids: set[str] = set()
+
     for raw in payloads:
         source_id = _effective_source_id(raw) or str(raw.get("source_id") or raw.get("id") or "unknown")
         existing = session.execute(select(RawProject).where(RawProject.source == source, RawProject.source_id == source_id)).scalar_one_or_none()
@@ -451,6 +485,21 @@ def ingest_source_records(
             canonical.estimated_value = normalized.get("estimated_value")
             canonical.provenance = normalized.get("provenance")
             summary.updated += 1
+            # A notice that was already known before this run is still accepted
+            # into the canonical store, so a re-sync must not report
+            # `accepted=0` while it refreshed `updated` records. Only ids that
+            # predate this run count here: a within-batch duplicate of a
+            # freshly fetched record is already counted by `created` when that
+            # first occurrence was ingested. `created`, `updated` and
+            # `duplicates` keep their existing per-record meaning; `accepted`
+            # now means "records this run left present and valid in the
+            # canonical store", which is `created` plus re-synced ids. Because
+            # a re-synced id is also a duplicate, `accepted` and `duplicates`
+            # overlap on reruns and must not be summed to reconcile against
+            # `records_fetched`.
+            if source_id in preexisting_source_ids and source_id not in accepted_source_ids:
+                summary.accepted += 1
+                accepted_source_ids.add(source_id)
             session.flush()
             continue
 
