@@ -48,7 +48,11 @@ def _contractor_with_uuid(**overrides):
 
 
 def test_projects_list_and_detail_work():
-    project = _project_with_uuid()
+    # The shared dev DB accumulates rows across runs and GET /projects orders by
+    # name with limit=50. Use a unique name that sorts before every accumulated
+    # row so this project is always on the default first page, and remove the row
+    # afterwards so the test stops contributing to that accumulation.
+    project = _project_with_uuid(name=f"AAA Phase 4 Project {uuid.uuid4().hex}")
     session = get_session()
     session.add(Project(
         id=uuid.UUID(project["id"]),
@@ -66,14 +70,24 @@ def test_projects_list_and_detail_work():
     ))
     session.commit()
 
-    list_response = client.get("/projects")
-    assert list_response.status_code == 200
-    ids = [item["id"] for item in list_response.json()]
-    assert project["id"] in ids
+    try:
+        list_response = client.get("/projects")
+        assert list_response.status_code == 200
+        ids = [item["id"] for item in list_response.json()]
+        assert project["id"] in ids
 
-    detail_response = client.get(f"/projects/{project['id']}")
-    assert detail_response.status_code == 200
-    assert detail_response.json()["name"] == project["name"]
+        detail_response = client.get(f"/projects/{project['id']}")
+        assert detail_response.status_code == 200
+        assert detail_response.json()["name"] == project["name"]
+    finally:
+        cleanup = get_session()
+        try:
+            cleanup.query(Project).filter(
+                Project.source_id == project["source_id"]
+            ).delete(synchronize_session=False)
+            cleanup.commit()
+        finally:
+            cleanup.close()
 
 
 def test_project_matches_and_detail_endpoints_work():
