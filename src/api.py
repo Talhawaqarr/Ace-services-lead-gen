@@ -370,6 +370,11 @@ def get_project_matches(
                     if isinstance(project_row.provenance, dict)
                     else None
                 ),
+                "synthetic": (
+                    bool((project_row.provenance or {}).get("synthetic"))
+                    if isinstance(project_row.provenance, dict)
+                    else False
+                ),
             },
             matches=match_items,
             summary=summary,

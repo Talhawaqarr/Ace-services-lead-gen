@@ -528,6 +528,31 @@ def test_demo_workspace_has_sync_and_queue_controls():
     assert "send-email" not in source
 
 
+def test_demo_ui_labels_live_vs_fixture_data_sources():
+    from pathlib import Path
+
+    source = Path("src/static/app.js").read_text(encoding="utf-8")
+    assert "Live SAM.gov" in source
+    assert "Fixture data" in source
+    assert "dataSourceLabel" in source
+
+
+def test_opportunity_payload_exposes_data_source_status():
+    from src.models.core import Project
+    from src.opportunity.service import opportunity_payload
+
+    project = Project(
+        name="Demo project",
+        source="samgov",
+        source_id="demo-live",
+        state="CA",
+        provenance={"synthetic": True},
+    )
+
+    payload = opportunity_payload(project)
+    assert payload["synthetic"] is True
+
+
 def test_demo_template_exposes_not_sent_queue_panel():
     from pathlib import Path
 

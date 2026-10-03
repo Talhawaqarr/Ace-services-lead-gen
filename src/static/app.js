@@ -83,6 +83,17 @@ function statusBadge(status) {
   return map[status] || 'subtle';
 }
 
+function dataSourceLabel(project) {
+  if (project && project.synthetic === false) return 'Live SAM.gov';
+  if (project && project.synthetic === true) return 'Fixture data';
+  return 'Demo source';
+}
+
+function sourceBadge(project) {
+  const label = dataSourceLabel(project);
+  return '<span class="badge badge-' + (project && project.synthetic === false ? 'accent' : 'subtle') + '">' + escapeHtml(label) + '</span>';
+}
+
 function setSyncMode(mode, label) {
   const chip = document.getElementById('syncMode');
   if (!chip) return;
@@ -175,7 +186,7 @@ function renderProjects() {
       '<p class="opp-title">' + escapeHtml(valueOrDash(project.name)) + '</p>' +
       '<p class="opp-line"><span class="opp-loc">' + escapeHtml(location || MISSING) + '</span>' +
       (due.text ? '<span class="opp-due' + (due.tone ? ' is-' + due.tone : '') + '">' + escapeHtml(due.text) + '</span>' : '') + '</p>' +
-      '<p class="opp-line opp-state">' + statusChip(project.status) +
+      '<p class="opp-line opp-state">' + sourceBadge(project) + statusChip(project.status) +
       (matchCount === null || matchCount === undefined ? '' : '<span class="opp-count">' + escapeHtml(String(matchCount)) + ' match' + (Number(matchCount) === 1 ? '' : 'es') + '</span>') +
       '</p>';
     item.onclick = () => selectProject(project.id);
@@ -375,6 +386,7 @@ function renderWorkspace() {
         kvPair('Ranking', escapeHtml(valueOrDash(selectedMatch.ranking))),
         kvPair('Matcher', '<span class="mono">' + escapeHtml(valueOrDash(selectedMatch.matcher_version)) + '</span>'),
         kvPair('Primary email', '<span class="mono">' + (selectedMatch.contractor_email ? escapeHtml(selectedMatch.contractor_email) : MISSING) + '</span>'),
+        kvPair('Data source', '<span class="badge badge-' + (project && project.synthetic === false ? 'accent' : 'subtle') + '">' + escapeHtml(dataSourceLabel(project)) + '</span>'),
       '</div>',
     '</div>',
     '<div class="sub">',
@@ -414,6 +426,7 @@ function renderWorkspace() {
       '</div>' +
       '<div class="ws-head-a">' +
         (project.construction_relevance ? '<span class="badge badge-subtle">' + escapeHtml(valueOrDash(project.construction_relevance)) + '</span>' : '') +
+        '<span class="badge badge-' + (project.synthetic === false ? 'accent' : 'subtle') + '">' + escapeHtml(dataSourceLabel(project)) + '</span>' +
         '<button class="btn btn-secondary btn-sm" onclick="refreshProjectMatches()">Refresh</button>' +
       '</div>' +
     '</header>' +
