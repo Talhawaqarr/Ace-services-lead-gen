@@ -260,3 +260,64 @@ def test_null_and_missing_location_shapes_do_not_crash():
     assert error is None
     assert without_place["city"] is None
     assert without_place["state"] is None
+
+
+def test_live_samgov_response_deadline_spelling_is_captured():
+    # Live SAM.gov Contract Opportunities returns "responseDeadLine" (capital D
+    # and L). The fixture historically used the misspelling "reponseDeadLine".
+    # Both spellings must be read so a live opportunity keeps its deadline.
+    live, error = _project_record_for(
+        _samgov_record(responseDeadLine="2026-10-16T12:00:00-06:00")
+    )
+
+    assert error is None
+    assert live["response_deadline"] == "2026-10-16T12:00:00-06:00"
+    assert live["provenance"]["response_deadline"] == "2026-10-16T12:00:00-06:00"
+
+    legacy, error = _project_record_for(
+        _samgov_record(reponseDeadLine="2026-10-19T12:00:00Z")
+    )
+
+    assert error is None
+    assert legacy["response_deadline"] == "2026-10-19T12:00:00Z"
+
+
+def test_live_samgov_opportunity_with_deadline_passes_a_deadline_window():
+    from datetime import datetime, timezone
+
+    from src.models.core import Project
+
+    normalized, error = _project_record_for(
+        _samgov_record(
+            responseDeadLine="2026-10-16T12:00:00-06:00",
+            placeOfPerformance={
+                "city": {"code": "Oakland", "name": "Oakland"},
+                "state": {"code": "CA", "name": "California"},
+                "country": {"code": "USA", "name": "UNITED STATES"},
+            },
+        )
+    )
+    assert error is None
+
+    project = Project(**{
+        key: normalized[key]
+        for key in (
+            "name",
+            "source",
+            "source_id",
+            "city",
+            "state",
+            "trades",
+            "bid_date",
+            "posted_date",
+            "response_deadline",
+            "status",
+            "description",
+            "source_url",
+            "estimated_value",
+            "provenance",
+        )
+    })
+
+    reference = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    assert qualifies_opportunity(project, now=reference, deadline_within_days=30) is True

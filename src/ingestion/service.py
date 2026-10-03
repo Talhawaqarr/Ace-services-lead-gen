@@ -263,7 +263,7 @@ def _samgov_construction_relevance(raw: dict[str, Any]) -> str:
 
 
 def _validate_samgov_dates(raw: dict[str, Any]) -> str | None:
-    for key in ("postedDate", "reponseDeadLine"):
+    for key in ("postedDate", "responseDeadLine", "reponseDeadLine"):
         value = raw.get(key)
         if value is None:
             continue
@@ -292,7 +292,15 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     state = _normalize_state((raw.get("state") or place.get("state") or location.get("state")))
     city = _normalize_city((raw.get("city") or place.get("city") or location.get("city")))
     posted_date = _normalize_date(raw.get("posted_date") or raw.get("postedDate"))
-    response_deadline = _normalize_date(raw.get("response_deadline") or raw.get("responseDeadline") or raw.get("reponseDeadLine"))
+    # Live SAM.gov Contract Opportunities returns the camel-cased
+    # "responseDeadLine"; the fixture only ever used the historical misspelling
+    # "reponseDeadLine". Both are accepted so neither source loses its deadline.
+    response_deadline = _normalize_date(
+        raw.get("response_deadline")
+        or raw.get("responseDeadline")
+        or raw.get("responseDeadLine")
+        or raw.get("reponseDeadLine")
+    )
     bid_date = _normalize_date(raw.get("bid_date") or raw.get("bidDate") or posted_date)
     raw_active = raw.get("active")
     status = _normalize_active_status(raw_active if raw_active is not None else raw.get("status"))
@@ -341,7 +349,7 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
             "source_id": source_id,
             "raw_excerpt": title[:120],
             "source_url": raw.get("uiLink") or raw.get("source_url"),
-            "response_deadline": raw.get("reponseDeadLine"),
+            "response_deadline": raw.get("responseDeadLine") or raw.get("reponseDeadLine"),
             "posting_date": raw.get("postedDate"),
             "description": _normalized_text(raw.get("description")),
             "organization_name": _normalized_text(raw.get("organizationName")),
