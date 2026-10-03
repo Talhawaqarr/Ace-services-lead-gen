@@ -352,3 +352,101 @@ def test_provider_rejects_a_missing_api_key():
     with pytest.raises(ValueError, match="SAMGOV_API_KEY"):
         LiveSAMEntityProvider("   ")
 
+
+def _reset_live_entity_contractors(session):
+    """Remove sam_entity contractor rows so the live integration test is isolated."""
+    from src.models.core import (
+        Contractor,
+        IngestionRun,
+        MatchRecord,
+        MatchReviewAudit,
+        RawContractor,
+    )
+
+    contractor_ids = [
+        row[0] for row in session.query(Contractor.id).filter(Contractor.source == "sam_entity").all()
+    ]
+    match_ids = (
+        [row[0] for row in session.query(MatchRecord.id).filter(MatchRecord.contractor_id.in_(contractor_ids)).all()]
+        if contractor_ids
+        else []
+    )
+    if match_ids:
+        session.query(MatchReviewAudit).filter(MatchReviewAudit.match_id.in_(match_ids)).delete(synchronize_session=False)
+        session.query(MatchRecord).filter(MatchRecord.id.in_(match_ids)).delete(synchronize_session=False)
+    session.query(Contractor).filter(Contractor.source == "sam_entity").delete(synchronize_session=False)
+    session.query(RawContractor).filter(RawContractor.source == "sam_entity").delete(synchronize_session=False)
+    session.query(IngestionRun).filter(IngestionRun.source == "sam_entity").delete(synchronize_session=False)
+    session.commit()
+
+
+def test_live_entity_record_reaches_the_matcher_with_explainable_signals():
+    """Live entity record -> ingest_contractors (DB) -> existing matcher signals."""
+    from src.db import get_session
+    from src.ingestion.service import ingest_contractors
+    from src.matching.engine import match_project
+    from src.models.core import Contractor
+
+    session = get_session()
+    _reset_live_entity_contractors(session)
+    try:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"entityData": [_entity()]})
+
+        provider = LiveSAMEntityProvider("secret", http_client=_client(handler), auto_paginate=False)
+        summary = ingest_contractors(session, provider, source_name="sam_entity")
+
+        assert summary["accepted"] == 1
+        contractor = (
+            session.query(Contractor)
+            .filter(Contractor.source == "sam_entity", Contractor.source_id == "R1KJZ8MQP3")
+            .one()
+        )
+        # Provenance survives ingestion: live, non-synthetic, UEI-keyed.
+        assert contractor.source == "sam_entity"
+        assert contractor.source_id == "R1KJZ8MQP3"
+        assert contractor.provenance["source"] == "sam_entity"
+        # NAICS 236220 maps to the matcher's "general" trade vocabulary.
+        assert contractor.trades == ["general"]
+        assert contractor.state == "CA"
+        assert contractor.city == "Sacramento"
+
+        project = {
+            "id": "live-match-project-1",
+            "name": "Live Entity Match Project",
+            "source": "samgov",
+            "source_id": "LIVE-MATCH-1",
+            "city": "Sacramento",
+            "state": "CA",
+            "trades": ["general"],
+            "bid_date": "2026-09-15",
+        }
+        results = match_project(
+            project,
+            [
+                {
+                    "id": str(contractor.id),
+                    "company_name": contractor.company_name,
+                    "source": contractor.source,
+                    "source_id": contractor.source_id,
+                    "city": contractor.city,
+                    "state": contractor.state,
+                    "trades": contractor.trades,
+                    "primary_email": contractor.primary_email,
+                }
+            ],
+        )
+
+        assert len(results) == 1
+        match = results[0]
+        assert match["components"]["trade_overlap"]["known"] is True
+        assert match["components"]["geography"]["known"] is True
+        assert match["components"]["bid_timing"]["known"] is True
+        assert any(factor.startswith("Trade overlap") for factor in match["positive_factors"])
+        assert any("Sacramento" in factor for factor in match["positive_factors"])
+        assert any("bid date" in factor for factor in match["positive_factors"])
+        assert match["match_score"] > 0.0
+    finally:
+        _reset_live_entity_contractors(session)
+        session.close()
+
