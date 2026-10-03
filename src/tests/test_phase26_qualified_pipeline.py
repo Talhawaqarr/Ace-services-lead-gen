@@ -9,10 +9,12 @@ def test_qualified_pipeline_matches_only_qualified_opportunities():
     try:
         payload = run_qualified_fixture_pipeline(session)
 
-        assert payload["projects_discovered"] == 4
-        assert payload["qualified_projects"] == 3
-        assert payload["projects_processed"] == 3
-        assert payload["matches_generated"] == 24
+        # Three fixture notices are discovered; only the two 23xxx construction
+        # ones qualify, because qualification now requires a construction NAICS.
+        assert payload["projects_discovered"] == 3
+        assert payload["qualified_projects"] == 2
+        assert payload["projects_processed"] == 2
+        assert payload["matches_generated"] == 5
     finally:
         session.rollback()
         session.close()

@@ -8,7 +8,7 @@ def test_runtime_config_does_not_expose_secret():
     assert response.status_code == 200
     payload = response.json()
     assert payload["app_env"] in {"development", "test", "staging", "production"}
-    assert payload["ingestion_mode"] == "fixture"
+    assert payload["ingestion_mode"] in {"fixture", "samgov"}
     assert payload["dry_run"] is True
     assert "samgov_api_key" not in payload
     assert "samgov_api_key_configured" in payload

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -43,6 +43,7 @@ class IngestionSummary:
     errors: int = 0
     created: int = 0
     updated: int = 0
+    source_ids: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -55,18 +56,112 @@ def _normalized_text(value: Any) -> str | None:
     return cleaned if cleaned else None
 
 
+def _location_token(value: Any) -> str | None:
+    """Flatten a location value that SAM.gov may return as a scalar or an object.
+
+    Live SAM.gov v2 returns ``placeOfPerformance.city``/``.state``/``.country`` as
+    plain strings for some notices and as ``{"code": ..., "name": ...}`` objects
+    for others. Stringifying an object leaks a Python repr such as
+    ``{'Code': 'Jeddah', 'Name': 'Jeddah'}`` into the canonical record, so prefer
+    the human-readable ``Name`` and fall back to the ``Code``. A container that
+    holds no such key yields ``None`` rather than ``str(dict)``/``str(list)``,
+    and plain strings keep their previous behaviour.
+    """
+    if isinstance(value, dict):
+        for key in ("Name", "name", "Code", "code"):
+            token = _normalized_text(value.get(key))
+            if token:
+                return token
+        return None
+    if isinstance(value, (list, tuple, set)):
+        return None
+    return _normalized_text(value)
+
+
+def _place_mapping(value: Any) -> dict[str, Any]:
+    """Return a location mapping from a mapping or the first entry of a list.
+
+    Live SAM.gov v2 reports ``placeOfPerformance`` and ``location`` as a list of
+    place objects, which cannot be read with ``.get``. Indexing one raised
+    ``AttributeError`` before persistence, and stringifying one leaked a Python
+    repr into the record, so the first place is treated as the canonical one and
+    any other shape means "no location reported".
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, (list, tuple)):
+        for entry in value:
+            if isinstance(entry, dict):
+                return entry
+    return {}
+
+
 def _normalize_state(value: Any) -> str | None:
-    cleaned = _normalized_text(value)
+    """Normalize a place-of-performance state to a two-letter code.
+
+    Plain strings keep the previous behaviour (upper-cased, truncated to two
+    characters). A location *object* is different: SAM.gov puts the real code in
+    ``Code`` (``"CA"``) and an ISO subdivision such as ``"CR-H"``/``"02"`` or a
+    place name such as ``"Heredia"`` otherwise. Truncating those fabricated US
+    state codes out of foreign place names, so an object only yields a value when
+    it actually carries a two-letter alphabetic code.
+    """
+    if isinstance(value, dict):
+        for key in ("Code", "code", "Name", "name"):
+            token = _normalized_text(value.get(key))
+            if token and len(token) == 2 and token.isalpha():
+                return token.upper()
+        return None
+    cleaned = _location_token(value)
     if cleaned is None:
         return None
     return cleaned.upper()[:2]
 
 
+def _place_of_performance_country(raw: dict[str, Any]) -> str | None:
+    """Return the place-of-performance country, never the contracting office country.
+
+    SAM.gov reports place of performance as an object and, for multi-place notices,
+    as a list of objects. Qualification for ACE's US contractor market depends on
+    this value, so it is preserved verbatim in provenance as the normalized
+    ``place_of_performance_country`` field. A missing country stays ``None`` rather
+    than defaulting to the USA, because a US contracting office routinely issues
+    notices that are performed abroad.
+    """
+    place = raw.get("placeOfPerformance")
+    if isinstance(place, list):
+        tokens = {
+            token
+            for entry in place
+            if isinstance(entry, dict)
+            for token in (_location_token(entry.get("country")),)
+            if token
+        }
+        return ", ".join(sorted(tokens)) or None
+    if isinstance(place, dict):
+        return _location_token(place.get("country"))
+    return None
+
+
 def _normalize_city(value: Any) -> str | None:
-    cleaned = _normalized_text(value)
+    cleaned = _location_token(value)
     if cleaned is None:
         return None
     return cleaned.title()
+
+
+def _normalize_active_status(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return "ACTIVE" if value else "INACTIVE"
+    cleaned = _normalized_text(value)
+    if cleaned is None:
+        return None
+    normalized = cleaned.lower()
+    if normalized in {"yes", "true", "1", "active"}:
+        return "ACTIVE"
+    if normalized in {"no", "false", "0", "inactive", "archived"}:
+        return "INACTIVE"
+    return cleaned
 
 
 def _normalize_date(value: Any) -> str | None:
@@ -168,7 +263,7 @@ def _samgov_construction_relevance(raw: dict[str, Any]) -> str:
 
 
 def _validate_samgov_dates(raw: dict[str, Any]) -> str | None:
-    for key in ("postedDate", "reponseDeadLine"):
+    for key in ("postedDate", "responseDeadLine", "reponseDeadLine"):
         value = raw.get(key)
         if value is None:
             continue
@@ -192,24 +287,37 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     if not title:
         return {}, "Missing project title"
 
-    place = raw.get("placeOfPerformance") or {}
-    state = _normalize_state((raw.get("state") or place.get("state") or (raw.get("location") or {}).get("state")))
-    city = _normalize_city((raw.get("city") or place.get("city") or (raw.get("location") or {}).get("city")))
+    place = _place_mapping(raw.get("placeOfPerformance"))
+    location = _place_mapping(raw.get("location"))
+    state = _normalize_state((raw.get("state") or place.get("state") or location.get("state")))
+    city = _normalize_city((raw.get("city") or place.get("city") or location.get("city")))
     posted_date = _normalize_date(raw.get("posted_date") or raw.get("postedDate"))
-    response_deadline = _normalize_date(raw.get("response_deadline") or raw.get("responseDeadline") or raw.get("reponseDeadLine"))
+    # Live SAM.gov Contract Opportunities returns the camel-cased
+    # "responseDeadLine"; the fixture only ever used the historical misspelling
+    # "reponseDeadLine". Both are accepted so neither source loses its deadline.
+    response_deadline = _normalize_date(
+        raw.get("response_deadline")
+        or raw.get("responseDeadline")
+        or raw.get("responseDeadLine")
+        or raw.get("reponseDeadLine")
+    )
     bid_date = _normalize_date(raw.get("bid_date") or raw.get("bidDate") or posted_date)
     raw_active = raw.get("active")
-    if isinstance(raw_active, bool):
-        status = "ACTIVE" if raw_active else "INACTIVE"
-    else:
-        status = _normalized_text(raw.get("status") or raw_active or raw.get("type"))
+    status = _normalize_active_status(raw_active if raw_active is not None else raw.get("status"))
+    if status is None and source != "samgov":
+        status = _normalized_text(raw.get("type"))
     description = _normalized_text(raw.get("description"))
     source_url = _normalized_text(raw.get("uiLink") or raw.get("source_url"))
     estimated_value = _normalize_numeric(raw.get("estimated_value") or raw.get("estimatedValue"))
     trades = _derive_project_trades(raw)
 
-    if raw.get("state") and len(str(raw.get("state"))) > 2:
-        state = _normalize_state(raw.get("state").split()[0])
+    raw_state = raw.get("state")
+    if not isinstance(raw_state, dict):
+        # A nested state object was already resolved object-aware above; only a
+        # plain string keeps the long-value behaviour of taking the first word.
+        raw_state_token = _location_token(raw_state)
+        if raw_state_token and len(raw_state_token) > 2:
+            state = _normalize_state(raw_state_token.split()[0])
 
     if raw.get("bid_date") and str(raw.get("bid_date")).lower() in {"unknown", "n/a"}:
         bid_date = None
@@ -241,7 +349,7 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
             "source_id": source_id,
             "raw_excerpt": title[:120],
             "source_url": raw.get("uiLink") or raw.get("source_url"),
-            "response_deadline": raw.get("reponseDeadLine"),
+            "response_deadline": raw.get("responseDeadLine") or raw.get("reponseDeadLine"),
             "posting_date": raw.get("postedDate"),
             "description": _normalized_text(raw.get("description")),
             "organization_name": _normalized_text(raw.get("organizationName")),
@@ -249,6 +357,7 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
             "procurement_type": _normalized_text(raw.get("type") or raw.get("baseType")),
             "naics_code": _normalized_text(raw.get("naicsCode")),
             "classification_code": _normalized_text(raw.get("classificationCode")),
+            "place_of_performance_country": _place_of_performance_country(raw),
             "resource_links": raw.get("resourceLinks") or [],
             "point_of_contact": raw.get("pointOfContact"),
             "award_amount": _normalize_numeric((raw.get("data") or {}).get("award", {}).get("amount")),
@@ -340,19 +449,52 @@ def _contractor_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | N
     return normalized, None
 
 
-def ingest_source_records(session: Session, provider: Any, source_name: str | None = None) -> dict[str, Any]:
-    provider_filters: dict[str, Any] = {}
+def _source_origin_is_synthetic(provider_meta: Any, raw: dict[str, Any]) -> bool | None:
+    """Return whether a fetched record comes from a synthetic source, when declared.
+
+    Both SAM.gov opportunity providers already report their origin in the ``meta``
+    block of the listing response, and the offline fixture additionally carries it
+    in each record's own ``provenance`` block. Persisting that existing signal onto
+    ``Project.provenance`` is what lets matching later tell a live SAM.gov
+    opportunity from a fixture one, since both store ``source == "samgov"``.
+    ``None`` means neither the provider nor the record declared an origin.
+    """
+    if isinstance(provider_meta, dict):
+        if provider_meta.get("synthetic") is not None:
+            return bool(provider_meta["synthetic"])
+        if provider_meta.get("live") is not None:
+            return not bool(provider_meta["live"])
+    raw_provenance = raw.get("provenance")
+    if isinstance(raw_provenance, dict) and raw_provenance.get("synthetic") is not None:
+        return bool(raw_provenance["synthetic"])
+    return None
+
+
+def ingest_source_records(
+    session: Session,
+    provider: Any,
+    source_name: str | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    provider_filters: dict[str, Any] = dict(filters or {})
     if (source_name or getattr(provider, "source_name", "unknown")).strip().lower() == "samgov":
         # Keep live ingestion focused on construction and bounded to one page by default.
         from src.config import get_settings
         settings = get_settings()
-        provider_filters = {
-            "naics": "23",
-            "limit": settings.samgov_page_limit,
-        }
+        provider_filters.setdefault("naics", "23")
+        provider_filters.setdefault("limit", settings.samgov_page_limit)
 
     records = provider.list_projects(provider_filters) if hasattr(provider, "list_projects") else []
     payloads = records.get("projects", []) if isinstance(records, dict) else records
+    provider_meta = records.get("meta") if isinstance(records, dict) else None
+
+    fetched_source_ids: list[str] = []
+    for raw in payloads:
+        if not isinstance(raw, dict):
+            continue
+        value = _effective_source_id(raw)
+        if value:
+            fetched_source_ids.append(value)
 
     source = source_name or getattr(provider, "source_name", "unknown")
     run = IngestionRun(
@@ -373,7 +515,23 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
         errors=0,
         created=0,
         updated=0,
+        source_ids=fetched_source_ids,
     )
+
+    # Snapshot the source ids already stored for this source before the run
+    # starts. A record that already exists in the canonical store is a re-sync
+    # of a known notice, not a within-batch duplicate of this fetch.
+    preexisting_source_ids = {
+        value
+        for value in session.execute(
+            select(RawProject.source_id).where(RawProject.source == source)
+        ).scalars()
+        if value
+    }
+
+    # Source ids already seen in this batch, so a notice that both pre-exists and
+    # repeats within one fetch is still only counted as accepted once.
+    accepted_source_ids: set[str] = set()
 
     for raw in payloads:
         source_id = _effective_source_id(raw) or str(raw.get("source_id") or raw.get("id") or "unknown")
@@ -382,13 +540,6 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
             existing = _build_raw_record(source, raw, "RECEIVED")
             session.add(existing)
             session.flush()
-
-        if source == "samgov" and _samgov_construction_relevance(raw) == "unlikely":
-            existing.status = "REJECTED"
-            existing.error_detail = "Opportunity does not meet construction relevance boundary"
-            summary.rejected += 1
-            session.flush()
-            continue
 
         normalized, error = _project_record_for(raw)
         if error:
@@ -399,34 +550,63 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
             session.flush()
             continue
 
+        # Persist the provider's live/synthetic origin so a later match run can
+        # tell a live SAM.gov opportunity from a fixture one even though both
+        # store source "samgov". Unknown origins stay unmarked rather than guessed.
+        origin_synthetic = _source_origin_is_synthetic(provider_meta, raw)
+        if origin_synthetic is not None:
+            provenance = dict(normalized.get("provenance") or {})
+            provenance["synthetic"] = origin_synthetic
+            normalized["provenance"] = provenance
+
+        if source == "samgov" and _samgov_construction_relevance(raw) == "unlikely":
+            existing.status = "REJECTED"
+            existing.error_detail = "Opportunity does not meet construction relevance boundary"
+            summary.rejected += 1
+            session.flush()
+            continue
+
         canonical = session.execute(select(Project).where(Project.source == source, Project.source_id == source_id)).scalar_one_or_none()
         if canonical is not None:
             existing.status = "DUPLICATE"
+            existing.fetched_at = datetime.now(timezone.utc)
+            existing.raw_payload = raw
+            existing.error_detail = None
             summary.duplicates += 1
-            if canonical.name is None and normalized.get("name"):
-                canonical.name = normalized["name"]
-            if canonical.city is None and normalized.get("city"):
-                canonical.city = normalized["city"]
-            if canonical.state is None and normalized.get("state"):
-                canonical.state = normalized["state"]
-            if canonical.bid_date is None and normalized.get("bid_date"):
-                canonical.bid_date = normalized["bid_date"]
-            if canonical.posted_date is None and normalized.get("posted_date"):
-                canonical.posted_date = normalized["posted_date"]
-            if canonical.response_deadline is None and normalized.get("response_deadline"):
-                canonical.response_deadline = normalized["response_deadline"]
-            if canonical.status is None and normalized.get("status"):
-                canonical.status = normalized["status"]
-            if canonical.description is None and normalized.get("description"):
-                canonical.description = normalized["description"]
-            if canonical.source_url is None and normalized.get("source_url"):
-                canonical.source_url = normalized["source_url"]
-            if canonical.estimated_value is None and normalized.get("estimated_value") is not None:
-                canonical.estimated_value = normalized["estimated_value"]
-            if canonical.trades in (None, []) and normalized.get("trades"):
-                canonical.trades = normalized["trades"]
-            if canonical.provenance is None:
-                canonical.provenance = normalized.get("provenance")
+
+            # Source-derived fields are mutable. A notice can be amended after
+            # first ingestion, so refresh them on subsequent syncs rather than
+            # freezing the first observed version in the canonical record.
+            canonical.name = normalized["name"]
+            canonical.city = normalized.get("city")
+            canonical.state = normalized.get("state")
+            canonical.latitude = normalized.get("latitude")
+            canonical.longitude = normalized.get("longitude")
+            canonical.trades = normalized.get("trades")
+            canonical.bid_date = normalized.get("bid_date")
+            canonical.posted_date = normalized.get("posted_date")
+            canonical.response_deadline = normalized.get("response_deadline")
+            canonical.status = normalized.get("status")
+            canonical.description = normalized.get("description")
+            canonical.source_url = normalized.get("source_url")
+            canonical.estimated_value = normalized.get("estimated_value")
+            canonical.provenance = normalized.get("provenance")
+            summary.updated += 1
+            # A notice that was already known before this run is still accepted
+            # into the canonical store, so a re-sync must not report
+            # `accepted=0` while it refreshed `updated` records. Only ids that
+            # predate this run count here: a within-batch duplicate of a
+            # freshly fetched record is already counted by `created` when that
+            # first occurrence was ingested. `created`, `updated` and
+            # `duplicates` keep their existing per-record meaning; `accepted`
+            # now means "records this run left present and valid in the
+            # canonical store", which is `created` plus re-synced ids. Because
+            # a re-synced id is also a duplicate, `accepted` and `duplicates`
+            # overlap on reruns and must not be summed to reconcile against
+            # `records_fetched`.
+            if source_id in preexisting_source_ids and source_id not in accepted_source_ids:
+                summary.accepted += 1
+                accepted_source_ids.add(source_id)
             session.flush()
             continue
 
@@ -465,9 +645,23 @@ def ingest_source_records(session: Session, provider: Any, source_name: str | No
     return summary.as_dict()
 
 
-def ingest_contractors(session: Session, provider: Any, source_name: str | None = None) -> dict[str, Any]:
-    records = provider.list_contractors({}) if hasattr(provider, "list_contractors") else []
+def ingest_contractors(
+    session: Session,
+    provider: Any,
+    source_name: str | None = None,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    provider_filters: dict[str, Any] = dict(filters or {})
+    records = provider.list_contractors(provider_filters) if hasattr(provider, "list_contractors") else []
     payloads = records.get("contractors", []) if isinstance(records, dict) else records
+
+    fetched_source_ids: list[str] = []
+    for raw in payloads:
+        if not isinstance(raw, dict):
+            continue
+        value = _effective_contractor_source_id(raw)
+        if value:
+            fetched_source_ids.append(value)
 
     source = source_name or getattr(provider, "source_name", "unknown")
     run = IngestionRun(
@@ -488,6 +682,7 @@ def ingest_contractors(session: Session, provider: Any, source_name: str | None 
         errors=0,
         created=0,
         updated=0,
+        source_ids=fetched_source_ids,
     )
 
     for raw in payloads:

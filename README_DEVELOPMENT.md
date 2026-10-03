@@ -41,6 +41,24 @@ python src/scripts/load_synthetic_data.py
 python src/scripts/verify_dev_setup.py
 ```
 
+6. Run the test suite
+
+```bash
+docker compose exec -T api python -m pytest
+```
+
+Run a single phase (example: Phase 11):
+
+```bash
+docker compose exec -T api python -m pytest src/tests/test_phase11_samgov_contractors.py -v
+```
+
 Notes:
 - All external providers use `providers/mock` by default.
 - DRY_RUN is `true` by default in `.env.example` — no real emails or API calls will be made.
+- The `db` service is intentionally NOT published to the host (see
+  `src/tests/test_phase19_container_hardening.py`); it is reachable only as
+  `db:5432` inside the compose network. Run tests through `docker compose exec`
+  against the `api` service (above) rather than on the host, otherwise pytest
+  will try `localhost:5432` from `.env` and fail with `Connection refused`.
+  The `api` container already has `DATABASE_URL=...@db:5432/ace_dev` injected.

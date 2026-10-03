@@ -65,7 +65,8 @@ def test_phase21_existing_pipeline_remains_idempotent():
 
     assert first.status_code == 200, first.text
     assert second.status_code == 200, second.text
-    assert first.json()["projects_discovered"] == 4
-    assert second.json()["projects_discovered"] == 4
-    assert first.json()["matches_generated"] == 32
-    assert second.json()["matches_generated"] == 32
+    assert first.json()["projects_discovered"] == 3
+    assert second.json()["projects_discovered"] == 3
+    # Only the two 23xxx fixture notices qualify now; SAM-1003 is NAICS 221310.
+    assert first.json()["matches_generated"] == 5
+    assert second.json()["matches_generated"] == 5

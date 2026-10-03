@@ -64,8 +64,28 @@ def test_ingestion_is_idempotent_for_same_source_id():
 
     assert first["created"] == 1
     assert second["duplicates"] == 1
-    assert second["updated"] == 0
+    assert second["updated"] == 1
     assert session.query(Project).filter(Project.source == "usaspending", Project.source_id == "award-repeat").count() == 1
+
+
+def test_resync_reports_accepted_for_refreshed_records():
+    session = get_session()
+    _reset_source_data(session)
+    provider = _FixtureProvider([_project_payload(source_id="award-resync", title="Resync Project", city="Fresno", state="CA")])
+
+    first = ingest_source_records(session, provider, source_name="usaspending")
+    second = ingest_source_records(session, provider, source_name="usaspending")
+
+    assert first["accepted"] == 1
+    assert first["created"] == 1
+    assert first["updated"] == 0
+    # A re-sync creates nothing, but the record is still accepted into the
+    # canonical store, so `accepted` must not collapse to 0 on rerun.
+    assert second["accepted"] == 1
+    assert second["created"] == 0
+    assert second["updated"] == 1
+    assert second["duplicates"] == 1
+    assert second["accepted"] == second["created"] + second["updated"]
 
 
 def test_raw_records_store_original_payload_and_error_status():

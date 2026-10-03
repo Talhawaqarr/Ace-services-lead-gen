@@ -21,6 +21,8 @@ services:
       REDIS_URL: redis://localhost:6379/0
       INGESTION_MODE: ${INGESTION_MODE:-fixture}
       SAMGOV_API_KEY: ${SAMGOV_API_KEY:-}
+      SAMGOV_PAGE_LIMIT: ${SAMGOV_PAGE_LIMIT:-100}
+      SAMGOV_MAX_PAGES: ${SAMGOV_MAX_PAGES:-1}
       EMAIL_PROVIDER: mock
       LLM_PROVIDER: mock
       DRY_RUN: "true"

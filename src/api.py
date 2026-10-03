@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 import httpx
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -19,7 +20,14 @@ from src.models.core import Contractor, IngestionRun, MatchRecord, MatchReviewAu
 from src.providers.samgov import SAMGovProvider
 from src.providers.live_samgov import LiveSAMGovProvider, SAMGovRateLimitError
 from src.providers.usaspending import USASpendingProvider
-from src.pipeline.service import _project_payload, discover_contractors, run_local_fixture_pipeline
+from src.pipeline.service import (
+    DEMO_HARD_MAX_RECORDS,
+    _project_payload,
+    contractor_source_for,
+    discover_contractors,
+    run_bounded_demo_pipeline,
+    run_qualified_fixture_pipeline,
+)
 from src.review.service import generate_matches, set_review_status
 from src.security import api_auth_middleware
 from src.observability import configure_logging, request_logging_middleware
@@ -38,6 +46,20 @@ class ReviewRequest(BaseModel):
     actor: str | None = Field(default="local-dev")
     source: str | None = Field(default="local-dev")
     reason: str | None = None
+
+
+class DemoRunRequest(BaseModel):
+    """Bounded demo sync request.
+
+    ``max_records`` is advisory only: the server always clamps it to
+    DEMO_HARD_MAX_RECORDS. ``query`` may only carry a small allowlisted set of
+    SAM.gov filter keys.
+    """
+
+    mode: Literal["fixture", "live"] = "fixture"
+    max_records: int | None = Field(default=None, ge=1, le=1000)
+    query: dict[str, str] | None = None
+    deadline_within_days: int | None = Field(default=None, ge=1, le=365)
 
 
 class ProjectSummary(BaseModel):
@@ -62,6 +84,7 @@ class ContractorSummary(BaseModel):
     company_name: str
     city: str | None = None
     state: str | None = None
+    primary_email: str | None = None
 
 
 class MatchEvidence(BaseModel):
@@ -77,6 +100,7 @@ class MatchItem(BaseModel):
     project_id: str
     contractor_id: str
     contractor_name: str
+    contractor_email: str | None = None
     ranking: int
     match_score: float
     confidence: str
@@ -119,6 +143,8 @@ def runtime_config() -> dict[str, Any]:
         "dry_run": settings.dry_run,
         "max_emails_per_hour": settings.max_emails_per_hour,
         "samgov_api_key_configured": settings.samgov_api_key is not None,
+        "samgov_page_limit": settings.samgov_page_limit,
+        "samgov_max_pages": settings.samgov_max_pages,
     }
 
 
@@ -311,6 +337,7 @@ def get_project_matches(
                     project_id=str(row.project_id),
                     contractor_id=str(row.contractor_id),
                     contractor_name=contractor.company_name,
+                    contractor_email=contractor.primary_email,
                     ranking=row.ranking,
                     match_score=float(row.match_score),
                     confidence=row.confidence,
@@ -338,6 +365,16 @@ def get_project_matches(
                 "description": project_row.description,
                 "source_url": project_row.source_url,
                 "estimated_value": project_row.estimated_value,
+                "construction_relevance": (
+                    (project_row.provenance or {}).get("construction_relevance")
+                    if isinstance(project_row.provenance, dict)
+                    else None
+                ),
+                "synthetic": (
+                    bool((project_row.provenance or {}).get("synthetic"))
+                    if isinstance(project_row.provenance, dict)
+                    else False
+                ),
             },
             matches=match_items,
             summary=summary,
@@ -377,6 +414,7 @@ def get_match_detail(match_id: str) -> dict[str, Any]:
                 "company_name": contractor.company_name if contractor else None,
                 "city": contractor.city if contractor else None,
                 "state": contractor.state if contractor else None,
+                "primary_email": contractor.primary_email if contractor else None,
             },
             "match": {
                 "project_id": str(row.project_id),
@@ -642,7 +680,12 @@ def generate_project_matches(project_id: str) -> dict[str, Any]:
                 detail="Opportunity does not qualify for matching",
             )
 
-        contractors = discover_contractors(session, project_row, source=project_row.source)
+        # Both live and fixture SAM.gov opportunities store source "samgov", so
+        # the project's own source can never pick the contractor pool. The origin
+        # marker persisted at ingestion keeps a live opportunity inside the live
+        # sam_entity cohort and a fixture opportunity inside the fixture samgov
+        # cohort instead of silently matching across the boundary.
+        contractors = discover_contractors(session, project_row, source=contractor_source_for(project_row))
         project_payload = _project_payload(project_row)
         matches = generate_matches(session, project_payload, contractors)
         session.commit()
@@ -652,9 +695,93 @@ def generate_project_matches(project_id: str) -> dict[str, Any]:
 @app.post("/pipeline/local/run")
 def run_local_pipeline() -> dict[str, Any]:
     with SessionLocal() as session:
-        summary = run_local_fixture_pipeline(session)
+        summary = run_qualified_fixture_pipeline(session)
         session.commit()
         return summary
+
+
+@app.get("/pipeline/demo/limits")
+def demo_limits() -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "hard_max_records": DEMO_HARD_MAX_RECORDS,
+        "default_max_records": 5,
+        "ingestion_mode": settings.ingestion_mode,
+        "live_available": settings.ingestion_mode == "samgov",
+        "samgov_api_key_configured": settings.samgov_api_key is not None,
+    }
+
+
+SAM_RATE_LIMIT_DETAIL = (
+    "SAM.gov API rate limit reached. No records were committed; "
+    "wait for the quota reset before retrying."
+)
+
+
+def _samgov_rate_limit_response(exc: SAMGovRateLimitError) -> JSONResponse:
+    """Build the 429 response, forwarding SAM's own reset signal when it gave one.
+
+    When SAM.gov sent a usable ``Retry-After`` the instant is returned as an
+    ISO-8601 ``retry_after`` field plus a standard ``Retry-After`` header, so the
+    UI can count down. When it did not, the response is exactly the previous
+    hardcoded 429: no reset time is ever fabricated.
+    """
+    retry_after = getattr(exc, "retry_after", None)
+    if retry_after is None:
+        return JSONResponse(status_code=429, content={"detail": SAM_RATE_LIMIT_DETAIL})
+    remaining = int((retry_after - datetime.now(timezone.utc)).total_seconds())
+    return JSONResponse(
+        status_code=429,
+        content={"detail": SAM_RATE_LIMIT_DETAIL, "retry_after": retry_after.isoformat()},
+        headers={"Retry-After": str(max(remaining, 0))},
+    )
+
+
+@app.post("/pipeline/demo/run")
+def run_demo_pipeline(payload: DemoRunRequest | None = None) -> dict[str, Any]:
+    """Run one bounded demo sync pass.
+
+    The request is intentionally tiny: a small page of SAM.gov-shaped records
+    is fetched, normalized, qualified, scored, and scoped to only the records
+    touched by this run. The server enforces the maximum request size.
+    """
+    payload = payload or DemoRunRequest()
+    with SessionLocal() as session:
+        try:
+            summary = run_bounded_demo_pipeline(
+                session,
+                mode=payload.mode,
+                query=payload.query,
+                max_records=payload.max_records,
+                deadline_within_days=payload.deadline_within_days,
+            )
+            session.commit()
+        except ValueError as exc:
+            session.rollback()
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except SAMGovRateLimitError as exc:
+            session.rollback()
+            return _samgov_rate_limit_response(exc)
+        except httpx.HTTPStatusError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=502,
+                detail=f"Upstream samgov API request failed with HTTP {exc.response.status_code}",
+            ) from exc
+        except Exception:
+            session.rollback()
+            raise
+        return summary
+
+
+@app.get("/outreach-queue", response_model=list[OutreachQueueResponse])
+def list_outreach_queue() -> list[OutreachQueueResponse]:
+    """List the demo outreach queue. Items are never delivered (NOT SENT)."""
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(OutreachQueueItem).order_by(OutreachQueueItem.queued_at.desc(), OutreachQueueItem.id.desc())
+        ).scalars().all()
+        return [OutreachQueueResponse(**_outreach_queue_payload(item)) for item in rows]
 
 
 @app.get("/ingestion/sources")
@@ -724,10 +851,7 @@ def run_ingestion(source: str) -> dict[str, Any]:
             session.commit()
         except SAMGovRateLimitError as exc:
             session.rollback()
-            raise HTTPException(
-                status_code=429,
-                detail="SAM.gov API rate limit reached. No records were committed; wait for the quota reset before retrying.",
-            ) from exc
+            return _samgov_rate_limit_response(exc)
         except httpx.HTTPStatusError as exc:
             session.rollback()
             raise HTTPException(

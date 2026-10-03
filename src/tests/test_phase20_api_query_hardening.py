@@ -21,7 +21,7 @@ def test_projects_endpoint_returns_persisted_match_count_without_changing_pagina
     assert response.status_code == 200
     sam_projects = {item["source_id"]: item for item in response.json() if item["source"] == "samgov"}
     assert "SAM-1001" in sam_projects
-    assert sam_projects["SAM-1001"]["match_count"] == 8
+    assert sam_projects["SAM-1001"]["match_count"] == 4
 
 
 def test_project_matches_endpoint_returns_joined_contractor_data():
@@ -34,7 +34,7 @@ def test_project_matches_endpoint_returns_joined_contractor_data():
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["summary"]["total"] == 8
+    assert payload["summary"]["total"] == 4
     assert all(item["contractor_name"] != "Unknown contractor" for item in payload["matches"])
 
 

@@ -1,5 +1,6 @@
 SQLAlchemy>=1.4
 alembic
+psycopg[binary]
 psycopg2-binary
 python-dotenv
 pytest

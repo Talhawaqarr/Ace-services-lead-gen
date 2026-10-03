@@ -1,0 +1,439 @@
+/* ============================================================
+   ACE Services - Opportunity Operations
+   Design system: dark navy nav, light neutral canvas, white
+   surfaces, restrained blue accent, semantic status colors.
+   Every selector below targets a class or id that index.html
+   or app.js actually renders - nothing here is decorative
+   scaffolding for markup that doesn't exist.
+   ============================================================ */
+
+:root{
+  /* --- surfaces & canvas --- */
+  --navy:#0f1e30;
+  --navy-2:#16283e;
+  --navy-line:#28394d;
+  --canvas:#f4f6f8;
+  --surface:#ffffff;
+  --surface-muted:#f8fafb;
+  --surface-hover:#fafbfd;
+
+  /* --- ink --- */
+  --ink:#141b24;
+  --ink-2:#33404d;
+  --muted:#647385;
+  --faint:#667587; /* >=4.5:1 on white; was 2.6:1 */
+
+  /* --- lines --- */
+  --line:#e3e8ee;
+  --line-strong:#ccd6e0;
+
+  /* --- accent --- */
+  --blue:#2761e6;
+  --blue-dark:#1c4bc4;
+  --blue-soft:#eaf1ff;
+
+  /* --- semantic status --- */
+  --green:#157a4c;
+  --green-soft:#e8f6ee;
+  --green-line:#b8e2c9;
+  --red:#c22a1c;
+  --red-soft:#fdecea;
+  --red-line:#f2c2bb;
+  --amber:#93620a;
+  --amber-soft:#fdf3df;
+  --amber-line:#eeda9f;
+
+  /* --- shape & elevation --- */
+  --radius:8px;
+  --radius-sm:6px;
+  --shadow-xs:0 1px 2px rgba(15,30,48,.05);
+  --shadow-sm:0 1px 2px rgba(15,30,48,.04),0 6px 16px rgba(15,30,48,.06);
+
+  /* --- layout metrics --- */
+  --shell:1600px;
+  --gutter:20px; /* page edge inset: shell, topbar, sync strip, queue */
+  --pad:20px;    /* horizontal padding inside workspace sections */
+  --rail-w:300px;
+  --topbar-h:52px;
+  --sync-h:40px;
+  --chrome:var(--topbar-h); /* only the topbar is sticky; the sync strip scrolls away so its wrapping text can never misalign sticky offsets */
+
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ============ reset ============ */
+*{box-sizing:border-box}
+html{background:var(--canvas)}
+body{
+  margin:0;background:var(--canvas);color:var(--ink);
+  font:13px/1.5 Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:4px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* ============ buttons ============ */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  border:1px solid transparent;border-radius:var(--radius-sm);
+  padding:7px 12px;font-weight:600;font-size:12.5px;line-height:1.2;
+  white-space:nowrap;transition:background-color .12s ease, border-color .12s ease;
+}
+.btn-primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.btn-primary:hover:not(:disabled){background:var(--blue-dark);border-color:var(--blue-dark)}
+.btn-secondary{background:#fff;color:var(--ink-2);border-color:var(--line-strong)}
+.btn-secondary:hover:not(:disabled){background:var(--surface-hover);border-color:#b6c2ce}
+.btn-danger{background:#fff;color:var(--red);border-color:var(--red-line)}
+.btn-danger:hover:not(:disabled){background:var(--red-soft)}
+.btn-quiet{background:transparent;color:var(--muted);border-color:var(--line)}
+.btn-quiet:hover:not(:disabled){background:var(--surface-muted);color:var(--ink-2);border-color:var(--line-strong)}
+.btn-sm{padding:5px 9px;font-size:11.5px}
+
+/* topbar buttons sit on navy: raise contrast for the ghost variant */
+.topbar .btn-secondary{background:transparent;color:#cfdbe8;border-color:#3a4e64}
+.topbar .btn-secondary:hover:not(:disabled){background:#1a2f47;color:#fff}
+.btn-group{display:flex;align-items:center;gap:8px}
+
+/* ============ status / mode chips (the single pill in the system) ============ */
+.mode{
+  display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:3px 9px;
+  border-radius:999px;font-size:11px;font-weight:650;border:1px solid transparent;letter-spacing:.01em;
+}
+.mode::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.85}
+.mode-subtle{background:#182b41;color:#a9b8c8;border-color:#2c4059}
+.mode-accent{background:#0f2f5c;color:#a9c8ff;border-color:#26497c}
+.mode-success{background:#0f3a2a;color:#97dfba;border-color:#1d6b4a}
+.mode-danger{background:#3d1e1c;color:#ffb3ab;border-color:#6b332e}
+
+/* ============ badges (status/chip language across the whole app) ============ */
+.badge{
+  display:inline-flex;align-items:center;white-space:nowrap;gap:4px;
+  padding:2px 6px;border-radius:4px;border:1px solid var(--line);
+  background:var(--surface-muted);font-size:10.5px;font-weight:650;color:#586778;
+  letter-spacing:.01em;
+}
+.badge-success{background:var(--green-soft);border-color:var(--green-line);color:var(--green)}
+.badge-danger{background:var(--red-soft);border-color:var(--red-line);color:var(--red)}
+.badge-warning{background:var(--amber-soft);border-color:var(--amber-line);color:var(--amber)}
+.badge-accent{background:var(--blue-soft);border-color:#c6d8fd;color:var(--blue-dark)}
+.badge-subtle{background:#f2f4f7;color:#66758a;border-color:var(--line)}
+/* "NOT SENT" is a safety signal: solid, high-contrast, never muted. */
+/* app.js puts the draft status badge first in .draft-h and the delivery badge
+   second, so :not(:first-child) targets only NOT SENT (a REJECTED draft stays
+   an ordinary danger badge). */
+.badge-solid,.draft-h .badge-danger:not(:first-child),.qi-a .badge-danger{
+  background:var(--red);border-color:var(--red);color:#fff;font-weight:700;letter-spacing:.03em;
+}
+/* ============ top navigation (sticky) ============ */
+.topbar{
+  height:var(--topbar-h);background:var(--navy);color:#fff;
+  border-bottom:1px solid var(--navy-line);position:sticky;top:0;z-index:60;
+}
+.topbar-inner{
+  height:100%;max-width:var(--shell);margin:auto;padding:0 var(--gutter);
+  display:flex;align-items:center;justify-content:space-between;gap:20px;
+}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand-mark{
+  display:grid;place-items:center;width:28px;height:28px;
+  border:1px solid #2c4059;border-radius:6px;background:#182b41;
+  font-size:10.5px;font-weight:800;letter-spacing:.04em;color:#dbe6f2;
+}
+.brand-copy{display:grid;gap:0}
+.brand-copy strong{font-size:13px;font-weight:650;letter-spacing:-.005em}
+.brand-copy span{font-size:10.5px;color:#8ea0b4}
+.topbar-actions{display:flex;align-items:center;gap:12px}
+
+/* ============ sync / status strip (scrolls with the page) ============ */
+.sync-strip{background:#fff;border-bottom:1px solid var(--line)}
+.sync-inner{
+  max-width:var(--shell);margin:auto;min-height:var(--sync-h);padding:6px var(--gutter);
+  display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
+}
+.sync-status{display:flex;align-items:center;flex-wrap:wrap;flex:1 1 auto;gap:4px 8px;color:var(--ink-2);font-size:12px;min-width:0}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--faint);flex:none}
+.sync-status:has(#demoStatus.is-success) .status-dot{background:var(--green)}
+.sync-status:has(#demoStatus.is-error) .status-dot{background:var(--red)}
+.sync-status:has(#demoStatus.is-running) .status-dot{background:var(--blue);animation:pulse 1.1s ease-in-out infinite}
+#demoStatus.is-success{color:var(--green)}
+#demoStatus.is-error{color:var(--red)}
+#demoStatus.is-running{color:var(--blue)}
+.limits{color:var(--faint);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:8px;border-left:1px solid var(--line)}
+.sync-stats{display:flex;flex-wrap:wrap;align-items:stretch;margin:0;gap:0}
+.sync-stats .count{display:flex;align-items:baseline;gap:6px;padding:0 14px;border-left:1px solid var(--line)}
+.sync-stats dt{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);font-weight:650}
+.sync-stats dd{margin:0;font-weight:700;color:var(--ink);font-size:12.5px;font-variant-numeric:tabular-nums}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* ============ app shell / two-pane layout ============ */
+.app-shell{
+  max-width:var(--shell);margin:12px auto 0;padding:0 var(--gutter);
+  display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);gap:12px;
+  align-items:start;
+}
+.opportunity-rail,.workspace-panel,.queue-panel{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-xs);
+}
+
+/* ============ opportunity rail (work queue) ============ */
+/* The rail pins under the chrome and scrolls internally so the workspace can
+   scroll past it: the operator never loses the pipeline while reading. */
+.opportunity-rail{
+  overflow:hidden;display:flex;flex-direction:column;
+  position:sticky;top:var(--chrome);
+  height:calc(100vh - var(--chrome) - 12px);min-height:360px;
+}
+.rail-head{flex:none;padding:12px 14px 10px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line)}
+.eyebrow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--faint)}
+.rail-head h2{margin:2px 0 0;font-size:14.5px;line-height:1.2;letter-spacing:-.01em;font-weight:650}
+.rail-count{font-size:10.5px;color:var(--muted);background:var(--surface-muted);border:1px solid var(--line);padding:2px 7px;border-radius:4px;font-variant-numeric:tabular-nums;flex:none}
+.rail-kpi{flex:none;padding:8px 14px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:8px;background:var(--surface-muted)}
+.rail-kpi strong{font-size:16px;letter-spacing:-.02em;font-weight:700;font-variant-numeric:tabular-nums}
+.rail-kpi span{font-size:11px;color:var(--muted)}
+
+.filters{flex:none;padding:8px 10px;display:grid;gap:6px;border-bottom:1px solid var(--line)}
+.field{width:100%;height:30px;padding:0 9px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:#fff;color:var(--ink);outline:none;font-size:12px}
+.field::placeholder{color:var(--faint)}
+.field:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.field-sm{height:28px;font-size:11.5px}
+
+.opportunity-list{list-style:none;padding:0;margin:0;overflow:auto;flex:1;min-height:0;overscroll-behavior:contain}
+.opp{position:relative;min-height:76px;padding:9px 12px 9px 14px;border-bottom:1px solid #eef1f5;cursor:pointer;transition:background-color .1s ease}
+.opp:hover{background:var(--surface-hover)}
+.opp:focus-visible{outline-offset:-2px}
+.opp.is-active{background:var(--blue-soft)}
+.opp.is-active:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--blue)}
+.opp.is-late:not(.is-active):before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--red);opacity:.8}
+.opp.is-soon:not(.is-active):before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--amber);opacity:.8}
+.opp-title{margin:0 0 3px;font-weight:650;font-size:12px;line-height:1.35;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.opp-line{margin:3px 0 0;display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:11px;color:var(--muted)}
+.opp-state{justify-content:flex-start;gap:6px}
+.opp-loc{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.opp-due{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums}
+.opp-due.is-soon{color:var(--amber);font-weight:700}
+.opp-due.is-late{color:var(--red);font-weight:700}
+.opp-count{margin-left:auto;color:var(--faint);font-variant-numeric:tabular-nums;font-size:10.5px}
+.opp .badge{font-size:10px;padding:1px 6px}
+.opp-empty{padding:24px 16px;text-align:center;color:var(--muted);border-bottom:0}
+.empty-t{margin:0 0 4px;font-weight:650;color:var(--ink);font-size:12.5px}
+.empty-d{margin:0;font-size:11.5px;line-height:1.55;color:var(--muted)}
+/* ============ workspace panel ============ */
+/* overflow:clip (not hidden) rounds the corners without creating a scroll
+   container, so .ws-head can still stick to the viewport. */
+.workspace-panel{min-width:0;overflow:visible;overflow:clip}
+.workspace{min-height:calc(100vh - var(--chrome) - 12px)}
+
+.ws-empty{padding:56px 24px;text-align:center;color:var(--muted)}
+.ws-empty .empty-t{font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px}
+.ws-empty .empty-d{max-width:360px;margin:4px auto 0}
+
+/* Opportunity header: sticky so title, deadline and status stay in view while
+   the match list scrolls underneath. */
+.ws-head{
+  padding:14px var(--pad) 12px;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+  border-bottom:1px solid var(--line);background:#fff;
+  position:sticky;top:var(--chrome);z-index:20;border-radius:var(--radius) var(--radius) 0 0;
+}
+.ws-head-t{min-width:0;flex:1}
+.ws-head-t .label{margin:0 0 3px}
+.ws-title{margin:0 0 5px;font-size:16px;line-height:1.3;letter-spacing:-.015em;font-weight:650;color:var(--ink);overflow-wrap:anywhere}
+.ws-meta{margin:0;display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:11.5px;color:var(--muted)}
+.ws-sep{width:3px;height:3px;border-radius:50%;background:var(--faint);flex:none}
+.ws-meta .is-soon{color:var(--amber);font-weight:650}
+.ws-meta .is-late{color:var(--red);font-weight:650}
+.ws-head-a{display:flex;align-items:center;gap:8px;flex:none}
+
+/* Stat strip inside the workspace: a caption row, not a KPI dashboard. */
+.figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--line);background:var(--surface-muted)}
+.fig{padding:9px var(--pad);border-left:1px solid var(--line)}
+.fig:first-child{border-left:none}
+.fig>.label{margin:0 0 2px}
+.fig-n{margin:0;display:flex;align-items:baseline;gap:7px}
+.fig-n>span:first-child{font-size:17px;font-weight:700;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums}
+.fig-note{font-size:11px;color:var(--muted)}
+
+/* section shells (Contractor matches / Outreach) */
+.label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:#7c8998;margin:0}
+.sec{border-top:1px solid var(--line)}
+.sec-head{padding:14px var(--pad) 8px}
+.sec-head h2.label{font-size:10.5px}
+.sec-sub{margin:4px 0 0;font-size:11.5px;color:var(--muted)}
+
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 var(--pad) 10px}
+.bar-sum{font-size:11.5px;color:var(--muted);flex:1;min-width:200px}
+.bar-end{display:flex;align-items:center;gap:8px;margin-left:auto}
+.bar .field{width:auto;min-width:158px}
+.bar-range{font-size:11.5px;color:var(--faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* inline result / error / success notes */
+.note{margin:10px var(--pad) 12px;padding:8px 10px;border-radius:var(--radius-sm);font-size:12px;border:1px solid}
+.sec>.muted,.sec>.err,.sec>.empty-d{margin:0 var(--pad) 14px}
+.sec>.btn{margin:0 var(--pad) 14px}
+.note-success{background:var(--green-soft);border-color:var(--green-line);color:var(--green)}
+.note-error{background:var(--red-soft);border-color:var(--red-line);color:var(--red)}
+.err{color:var(--red);font-size:12px;margin:0}
+.muted{color:var(--muted);font-size:12px;margin:0}
+.mono{font-family:var(--mono);font-size:11.5px;letter-spacing:-.01em}
+/* ============ contractor match rows ============ */
+/* One plain column. Matches are ordinary block-level rows: same left edge,
+   same width, no placement rules. */
+.matches{display:flex;flex-direction:column;gap:8px;padding:0 var(--pad) 16px}
+.matches > *{min-width:0}
+.match{
+  /* internal layout only: identity | score | evidence+actions */
+  display:grid;grid-template-columns:minmax(0,1.4fr) 68px minmax(0,1.6fr);gap:14px;
+  align-items:start;border:1px solid var(--line);border-radius:var(--radius-sm);
+  padding:10px 12px;background:#fff;
+  transition:border-color .12s ease, box-shadow .12s ease, background-color .12s ease;
+}
+.match:hover{border-color:var(--line-strong)}
+.match.is-selected{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue);background:#fafcff}
+.match-main{min-width:0}
+.match-name{margin:0 0 4px;font-weight:650;font-size:12.5px;color:var(--ink);overflow-wrap:anywhere}
+.match-meta{margin:0 0 5px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.match-contact{margin:0;font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px}
+.match-contact::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex:none;opacity:.9}
+.match-contact.hasnt::before{display:none}
+.match-contact.has{color:var(--green)}
+.match-contact.hasnt{color:var(--faint)}
+
+.score{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:2px 0;border-left:1px solid #eef1f5;border-right:1px solid #eef1f5}
+.score>b{font-size:17px;font-weight:700;color:var(--ink);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.score>span{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:650}
+
+.match-side{min-width:0;display:flex;flex-direction:column;gap:6px}
+.match-why{margin:0;font-size:11.5px;color:var(--ink-2);line-height:1.45;overflow-wrap:anywhere}
+.match-why.is-neg{color:var(--muted)}
+.match-why.is-neg::before{content:"\2212\00a0";color:var(--faint)}
+.match-acts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:2px;justify-content:flex-end}
+.match-acts .badge{margin-right:auto}
+/* "Open" is navigation, so it reads as a secondary control, not a discard. */
+.match-acts .btn-quiet[onclick^="openMatch"]{border-color:var(--line-strong);color:var(--ink-2);background:#fff}
+.match-acts .btn-quiet[onclick^="openMatch"]:hover:not(:disabled){background:var(--surface-hover)}
+/* ============ match detail: sub-panels (score / factors / history) ============ */
+.sub{padding:14px var(--pad);border-top:1px solid var(--line);min-width:0;background:var(--surface-muted)}
+.sub .label{margin-bottom:10px;display:block}
+
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 20px}
+.kv-p{display:grid;gap:2px;min-width:0}
+.kv-p dt{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:650}
+.kv-p dd{margin:0;font-size:12px;color:var(--ink);font-weight:600;overflow-wrap:anywhere}
+
+.fg{min-width:0}
+.fg .label{margin-bottom:6px}
+.facts-list{margin:0;padding-left:16px;color:var(--ink-2);font-size:11.5px;line-height:1.6}
+/* Factor columns reflow by available width (never squeezed below 200px). */
+.sub:has(.fg){display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 20px}
+.sub > .fg + .fg{margin-top:12px}
+.sub:has(.fg) > .fg + .fg{margin-top:0}
+.facts-list li{overflow-wrap:anywhere}
+
+.hist{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.hist li{padding:7px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:#fff}
+.hist-m{margin:0 0 2px;font-size:11.5px}
+.hist-m b{font-weight:650;color:var(--ink)}
+.hist-t{margin:0;font-size:10.5px;color:var(--faint)}
+
+/* ============ workspace sections: single-column vertical flow ============
+   app.js emits, in order: .sec-head, .bar, .matches, then the .sub detail
+   blocks (match detail / factors / review history). The dynamic child order
+   is treated as a straight vertical stack - no grid placement is assumed for
+   generated children, so no match or panel can land in an unintended column. */
+
+/* ============ outreach: four-step progression ============ */
+.sec .steps{margin:0 var(--pad) 14px}
+.steps{list-style:none;display:flex;align-items:center;flex-wrap:wrap;gap:6px 0;margin:0;padding:0}
+.step{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--faint);padding:0;border:0;background:none;border-radius:0}
+.step-n{display:grid;place-items:center;width:18px;height:18px;border-radius:6px;background:#e3e8ee;color:var(--faint);font-size:10px;font-weight:700;font-variant-numeric:tabular-nums}
+.step.is-done{color:var(--green)}
+.step.is-done .step-n{background:var(--green);color:#fff}
+.step.is-now{color:var(--blue-dark);font-weight:650}
+.step.is-now .step-n{background:var(--blue);color:#fff}
+.step.is-todo{color:var(--faint)}
+.step-arrow{color:var(--faint);padding:0 10px;font-size:11px;line-height:1}
+/* app.js already renders the arrow glyph; no pseudo-element (it doubled it). */
+
+/* outreach draft document (the one legitimate card: it is a document) */
+.draft{margin:0 var(--pad) 14px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:#fff}
+.draft-h{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--surface-muted)}
+.draft-to{margin-left:auto;min-width:0;color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+.draft-sub{margin:0;padding:11px 12px 0;font-weight:650;font-size:12.5px;color:var(--ink)}
+.draft-body{margin:9px 12px 0;font:11.5px/1.6 var(--mono);white-space:pre-wrap;word-break:break-word;background:var(--surface-muted);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 11px;color:var(--ink-2);max-height:340px;overflow:auto}
+.draft-f{padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.draft-f:has(.acts){border-top:1px solid var(--line);justify-content:flex-end}
+.acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* ============ global outreach queue (an operational work queue) ============ */
+/* same outer edges as .app-shell content */
+.queue-panel{width:min(calc(100% - 2 * var(--gutter)),calc(var(--shell) - 2 * var(--gutter)));margin:12px auto 24px;padding:14px var(--pad)}
+.queue-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.queue-head h2{margin:2px 0 0;font-size:15px;line-height:1.2;letter-spacing:-.01em;font-weight:650}
+.queue-meta{display:flex;align-items:center;gap:8px}
+.queue-note{margin-top:4px;color:var(--muted);font-size:11.5px}
+.queue-body{margin-top:12px;display:grid;gap:0}
+.queue-body:has(.qi){border:1px solid var(--line);border-radius:var(--radius);background:#fff;overflow:hidden}
+
+.qi{display:grid;grid-template-columns:minmax(0,1fr) 132px;gap:14px;align-items:start;padding:12px 14px;background:#fff}
+.qi+.qi{border-top:1px solid var(--line)}
+.qi-m{min-width:0}
+.qi-t{margin:0 0 5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.qi-s{font-weight:650;font-size:12.5px;color:var(--ink);min-width:0;overflow-wrap:anywhere}
+.qi-meta{margin:0 0 8px;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.qi .draft-body{margin:0;font-size:11px;max-height:7.5em;overflow:auto}
+.qi-a{margin:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.qi-id{color:var(--faint);font-size:10.5px;overflow-wrap:anywhere}
+
+/* ============ loading spinner ============ */
+.spin{
+  display:inline-block;width:12px;height:12px;margin-right:2px;
+  border:2px solid var(--line-strong);border-top-color:var(--blue);
+  border-radius:50%;animation:spin .7s linear infinite;vertical-align:-1px;
+}
+@media (prefers-reduced-motion: reduce){
+  .spin{animation-duration:1.6s}
+  .sync-status:has(#demoStatus.is-running) .status-dot{animation:none}
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* ============ responsive ============ */
+@media(max-width:1279px){
+  .app-shell{grid-template-columns:264px minmax(0,1fr)}
+}
+/* Evidence/actions drop under identity+score once the row gets narrow. */
+@media(max-width:1180px){
+  .match{grid-template-columns:minmax(0,1fr) 68px}
+  .match-side{grid-column:1 / -1}
+}
+/* Stack rail above workspace. The rail becomes a short scrolling list. */
+@media(max-width:900px){
+  .app-shell{grid-template-columns:minmax(0,1fr);align-items:stretch}
+  .opportunity-rail{position:static;height:auto;min-height:0}
+  .opportunity-list{flex:none;max-height:300px}
+  .ws-head{position:static}
+  .workspace{min-height:0}
+  .sync-stats{width:100%}
+  .sync-stats .count:first-child{border-left:0;padding-left:0}
+}
+@media(max-width:760px){
+  :root{--gutter:12px;--pad:16px}
+  .topbar{height:auto;position:static}
+  .topbar-inner{height:auto;padding:10px var(--gutter);align-items:flex-start;flex-direction:column;gap:10px}
+  .topbar-actions{width:100%;justify-content:space-between}
+  .figs{grid-template-columns:1fr}
+  .fig{border-left:none;border-top:1px solid var(--line)}
+  .fig:first-child{border-top:none}
+  .kv{grid-template-columns:1fr 1fr}
+  .ws-head{flex-direction:column}
+  .qi{grid-template-columns:1fr}
+  .qi-a{flex-direction:row;align-items:center;justify-content:flex-start}
+}
+@media(max-width:560px){
+  :root{--gutter:10px}
+  .match{grid-template-columns:1fr;gap:10px}
+  .score{flex-direction:row;justify-content:flex-start;gap:6px;padding:0;border-left:0;border-right:0}
+  .match-acts{justify-content:flex-start}
+  .match-acts .badge{margin-right:0}
+  .kv{grid-template-columns:1fr}
+}
