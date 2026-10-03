@@ -17,6 +17,8 @@ from src.review.service import generate_matches
 # harvesting every historical SAM.gov record in the database.
 DEMO_HARD_MAX_RECORDS = 10
 DEMO_DEFAULT_MAX_RECORDS = 5
+LIVE_DEMO_TARGET_CANDIDATES = 50
+LIVE_DEMO_MAX_PAGES = 5
 DEMO_ALLOWED_QUERY_KEYS = frozenset({"keyword", "state", "naics", "ptype"})
 
 # The two SAM.gov contractor cohorts. Opportunities share ``source == "samgov"``,
@@ -247,6 +249,14 @@ def run_bounded_demo_pipeline(
     settings = get_settings()
     filters, effective_cap = build_demo_filters(query, max_records=max_records)
 
+    if normalized_mode == "live" and max_records is None:
+        # Keep the default live demo page size aligned with the provider's
+        # candidate target so auto-pagination can walk across the configured
+        # 50-candidate pool. This does not change the fixture/default demo path,
+        # and the provider still enforces the hard cap and max-pages envelope.
+        filters["limit"] = LIVE_DEMO_TARGET_CANDIDATES
+        effective_cap = max(effective_cap, LIVE_DEMO_TARGET_CANDIDATES)
+
     if opportunity_provider is None:
         if normalized_mode == "live":
             if settings.ingestion_mode != "samgov":
@@ -259,15 +269,15 @@ def run_bounded_demo_pipeline(
             from src.providers.live_samgov import LiveSAMGovProvider
 
             # Bounded candidate retrieval: pagination is enabled so the provider
-            # can look past a thin first page, but it is capped at 3 requests and
-            # the provider stops earlier once its own candidate target is met.
-            # The provider's candidate target and hard cap are left at their
-            # defaults, and the caller-facing DEMO_HARD_MAX_RECORDS cap still
-            # bounds the run, so this can never become unbounded retrieval.
+            # can look past a thin first page, but the live demo stays within a
+            # larger yet still tightly bounded candidate pool. The provider's
+            # global hard cap remains unchanged; only the demo wiring widens the
+            # candidate target before local qualification filters the results.
             opportunity_provider = LiveSAMGovProvider(
                 settings.samgov_api_key,
                 auto_paginate=True,
-                max_pages=3,
+                max_pages=LIVE_DEMO_MAX_PAGES,
+                target_candidates=LIVE_DEMO_TARGET_CANDIDATES,
             )
         else:
             opportunity_provider = SAMGovProvider()
@@ -303,6 +313,28 @@ def run_bounded_demo_pipeline(
 
     run_source_ids = list(dict.fromkeys(opportunity_summary.get("source_ids") or []))
 
+    if not run_source_ids:
+        contractor_summary = ingest_contractors(
+            session,
+            contractor_provider,
+            source_name=contractor_source,
+            filters={},
+        )
+        session.flush()
+        return {
+            "mode": normalized_mode,
+            "records_requested": effective_cap,
+            "opportunities": opportunity_summary,
+            "contractors": contractor_summary,
+            "run_source_ids": [],
+            "projects_discovered": 0,
+            "qualified_projects": 0,
+            "projects_processed": 0,
+            "matches_generated": 0,
+            "projects": [],
+            "empty": True,
+        }
+
     projects = session.execute(
         select(Project)
         .where(Project.source == "samgov", Project.source_id.in_(run_source_ids))
@@ -322,22 +354,6 @@ def run_bounded_demo_pipeline(
         source_name=contractor_source,
         filters=contractor_filters,
     )
-
-    if not run_source_ids:
-        session.flush()
-        return {
-            "mode": normalized_mode,
-            "records_requested": effective_cap,
-            "opportunities": opportunity_summary,
-            "contractors": contractor_summary,
-            "run_source_ids": [],
-            "projects_discovered": 0,
-            "qualified_projects": 0,
-            "projects_processed": 0,
-            "matches_generated": 0,
-            "projects": [],
-            "empty": True,
-        }
 
     qualified_ids = {
         project.id

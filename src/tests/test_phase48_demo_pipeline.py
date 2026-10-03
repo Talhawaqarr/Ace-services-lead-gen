@@ -125,6 +125,33 @@ def test_demo_filters_never_allow_client_to_exceed_hard_max():
     assert cap == DEMO_HARD_MAX_RECORDS
 
 
+def test_demo_filters_default_limit_remains_five():
+    filters, cap = build_demo_filters(None)
+    assert cap == 5
+    assert filters["limit"] == 5
+
+
+def test_live_demo_raises_page_limit_to_target_candidates(monkeypatch):
+    import src.pipeline.service as pipeline
+
+    captured: dict[str, dict[str, int]] = {}
+
+    def _capture_ingest(session, provider, source_name=None, filters=None):
+        captured["filters"] = dict(filters or {})
+        return {"source": source_name or "samgov", "records_fetched": 0, "source_ids": []}
+
+    monkeypatch.setattr(pipeline, "ingest_source_records", _capture_ingest)
+    monkeypatch.setattr(
+        pipeline,
+        "ingest_contractors",
+        lambda *a, **k: {"source": "sam_entity", "records_fetched": 0, "source_ids": []},
+    )
+
+    pipeline.run_bounded_demo_pipeline(_FlushOnlySession(), mode="live")
+
+    assert captured["filters"]["limit"] == 50
+
+
 def test_demo_run_forwards_bounded_filters_and_scopes_to_run_records():
     db = _session()
     try:
@@ -230,7 +257,21 @@ def test_demo_run_rejects_invalid_mode():
 
 
 class _FlushOnlySession:
-    """Session stub for the no-sources path, which only needs flush()."""
+    """Session stub for the no-sources path used by provider-construction tests."""
+
+    class _EmptyScalarResult:
+        def scalars(self):
+            class _Scalars:
+                def all(self):
+                    return []
+
+            return _Scalars()
+
+        def scalar_one(self):
+            return 0
+
+    def execute(self, statement, *args, **kwargs):
+        return self._EmptyScalarResult()
 
     def flush(self) -> None:
         return None
@@ -277,12 +318,13 @@ def test_live_demo_opportunity_provider_uses_bounded_candidate_retrieval(monkeyp
     result = pipeline.run_bounded_demo_pipeline(_FlushOnlySession(), mode="live", max_records=1)
 
     assert built["opportunity_api_key"] == "test-key"
-    # Bounded candidate retrieval: pagination on, but capped at 3 SAM requests.
+    # Bounded candidate retrieval: pagination on, but capped at a larger live-demo
+    # pool that still stays within the repo's hard safety envelope.
     assert built["opportunity_kwargs"]["auto_paginate"] is True
-    assert built["opportunity_kwargs"]["max_pages"] == 3
-    # The provider's own candidate target and hard cap stay at their defaults,
-    # so the demo neither raises nor bypasses them.
-    assert "target_candidates" not in built["opportunity_kwargs"]
+    assert built["opportunity_kwargs"]["max_pages"] == 5
+    assert built["opportunity_kwargs"]["target_candidates"] == 50
+    # The hard cap stays at the provider's global ceiling; only the demo's
+    # target pool is widened without creating an unbounded path.
     assert "max_candidates" not in built["opportunity_kwargs"]
     # Contractor retrieval is untouched: still a single bounded page.
     assert built["contractor_kwargs"]["auto_paginate"] is False
