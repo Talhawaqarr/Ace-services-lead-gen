@@ -449,6 +449,27 @@ def _contractor_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | N
     return normalized, None
 
 
+def _source_origin_is_synthetic(provider_meta: Any, raw: dict[str, Any]) -> bool | None:
+    """Return whether a fetched record comes from a synthetic source, when declared.
+
+    Both SAM.gov opportunity providers already report their origin in the ``meta``
+    block of the listing response, and the offline fixture additionally carries it
+    in each record's own ``provenance`` block. Persisting that existing signal onto
+    ``Project.provenance`` is what lets matching later tell a live SAM.gov
+    opportunity from a fixture one, since both store ``source == "samgov"``.
+    ``None`` means neither the provider nor the record declared an origin.
+    """
+    if isinstance(provider_meta, dict):
+        if provider_meta.get("synthetic") is not None:
+            return bool(provider_meta["synthetic"])
+        if provider_meta.get("live") is not None:
+            return not bool(provider_meta["live"])
+    raw_provenance = raw.get("provenance")
+    if isinstance(raw_provenance, dict) and raw_provenance.get("synthetic") is not None:
+        return bool(raw_provenance["synthetic"])
+    return None
+
+
 def ingest_source_records(
     session: Session,
     provider: Any,
@@ -465,6 +486,7 @@ def ingest_source_records(
 
     records = provider.list_projects(provider_filters) if hasattr(provider, "list_projects") else []
     payloads = records.get("projects", []) if isinstance(records, dict) else records
+    provider_meta = records.get("meta") if isinstance(records, dict) else None
 
     fetched_source_ids: list[str] = []
     for raw in payloads:
@@ -527,6 +549,15 @@ def ingest_source_records(
             summary.errors += 1
             session.flush()
             continue
+
+        # Persist the provider's live/synthetic origin so a later match run can
+        # tell a live SAM.gov opportunity from a fixture one even though both
+        # store source "samgov". Unknown origins stay unmarked rather than guessed.
+        origin_synthetic = _source_origin_is_synthetic(provider_meta, raw)
+        if origin_synthetic is not None:
+            provenance = dict(normalized.get("provenance") or {})
+            provenance["synthetic"] = origin_synthetic
+            normalized["provenance"] = provenance
 
         if source == "samgov" and _samgov_construction_relevance(raw) == "unlikely":
             existing.status = "REJECTED"

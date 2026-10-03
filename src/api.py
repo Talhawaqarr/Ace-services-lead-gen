@@ -23,6 +23,7 @@ from src.providers.usaspending import USASpendingProvider
 from src.pipeline.service import (
     DEMO_HARD_MAX_RECORDS,
     _project_payload,
+    contractor_source_for,
     discover_contractors,
     run_bounded_demo_pipeline,
     run_qualified_fixture_pipeline,
@@ -674,7 +675,12 @@ def generate_project_matches(project_id: str) -> dict[str, Any]:
                 detail="Opportunity does not qualify for matching",
             )
 
-        contractors = discover_contractors(session, project_row, source=project_row.source)
+        # Both live and fixture SAM.gov opportunities store source "samgov", so
+        # the project's own source can never pick the contractor pool. The origin
+        # marker persisted at ingestion keeps a live opportunity inside the live
+        # sam_entity cohort and a fixture opportunity inside the fixture samgov
+        # cohort instead of silently matching across the boundary.
+        contractors = discover_contractors(session, project_row, source=contractor_source_for(project_row))
         project_payload = _project_payload(project_row)
         matches = generate_matches(session, project_payload, contractors)
         session.commit()

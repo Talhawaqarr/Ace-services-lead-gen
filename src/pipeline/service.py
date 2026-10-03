@@ -19,6 +19,12 @@ DEMO_HARD_MAX_RECORDS = 10
 DEMO_DEFAULT_MAX_RECORDS = 5
 DEMO_ALLOWED_QUERY_KEYS = frozenset({"keyword", "state", "naics", "ptype"})
 
+# The two SAM.gov contractor cohorts. Opportunities share ``source == "samgov"``,
+# so contractor discovery has to key off the project's origin marker instead of
+# the project's own source to keep the cohorts apart.
+FIXTURE_CONTRACTOR_SOURCE = "samgov"
+LIVE_CONTRACTOR_SOURCE = "sam_entity"
+
 
 def _project_payload(project: Project) -> dict[str, Any]:
     return {
@@ -50,6 +56,30 @@ def _contractor_payload(contractor: Contractor) -> dict[str, Any]:
         "primary_email": contractor.primary_email,
         "provenance": contractor.provenance,
     }
+
+
+def contractor_source_for(project: Project) -> str:
+    """Return the contractor source that belongs to this project's cohort.
+
+    SAM.gov opportunities exist in two cohorts that must never be mixed, and both
+    cohorts persist ``Project.source == "samgov"``. The discriminator is therefore
+    not ``Project.source`` but the ``provenance["synthetic"]`` marker written at
+    ingestion from the provider's own origin metadata: ``False`` means the
+    opportunity came from the live SAM.gov API and is matched only against live
+    ``sam_entity`` contractors, while ``True`` means it came from the offline
+    fixture and is matched only against fixture ``samgov`` contractors.
+
+    Every other source keeps its own value because it has a single identity. SAM.gov
+    rows that predate the marker (or were seeded outside ingestion) fall back to the
+    fixture cohort, which is the repository's documented default mode, so existing
+    behaviour is unchanged for them.
+    """
+    if project.source != FIXTURE_CONTRACTOR_SOURCE:
+        return project.source
+    provenance = project.provenance if isinstance(project.provenance, dict) else {}
+    if provenance.get("synthetic") is False:
+        return LIVE_CONTRACTOR_SOURCE
+    return FIXTURE_CONTRACTOR_SOURCE
 
 
 def discover_contractors(
@@ -120,7 +150,7 @@ def run_local_fixture_pipeline(
     generated = 0
     projects_processed = 0
     for project in projects:
-        candidates = discover_contractors(session, project, source="samgov")
+        candidates = discover_contractors(session, project, source=contractor_source_for(project))
         if not candidates:
             continue
         matches = generate_matches(session, _project_payload(project), candidates)
@@ -373,7 +403,7 @@ def run_qualified_fixture_pipeline(
     generated = 0
     projects_processed = 0
     for project in qualified:
-        candidates = discover_contractors(session, project, source="samgov")
+        candidates = discover_contractors(session, project, source=contractor_source_for(project))
         if not candidates:
             continue
         matches = generate_matches(session, _project_payload(project), candidates)
