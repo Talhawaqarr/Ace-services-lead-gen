@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 import httpx
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -700,6 +701,31 @@ def demo_limits() -> dict[str, Any]:
     }
 
 
+SAM_RATE_LIMIT_DETAIL = (
+    "SAM.gov API rate limit reached. No records were committed; "
+    "wait for the quota reset before retrying."
+)
+
+
+def _samgov_rate_limit_response(exc: SAMGovRateLimitError) -> JSONResponse:
+    """Build the 429 response, forwarding SAM's own reset signal when it gave one.
+
+    When SAM.gov sent a usable ``Retry-After`` the instant is returned as an
+    ISO-8601 ``retry_after`` field plus a standard ``Retry-After`` header, so the
+    UI can count down. When it did not, the response is exactly the previous
+    hardcoded 429: no reset time is ever fabricated.
+    """
+    retry_after = getattr(exc, "retry_after", None)
+    if retry_after is None:
+        return JSONResponse(status_code=429, content={"detail": SAM_RATE_LIMIT_DETAIL})
+    remaining = int((retry_after - datetime.now(timezone.utc)).total_seconds())
+    return JSONResponse(
+        status_code=429,
+        content={"detail": SAM_RATE_LIMIT_DETAIL, "retry_after": retry_after.isoformat()},
+        headers={"Retry-After": str(max(remaining, 0))},
+    )
+
+
 @app.post("/pipeline/demo/run")
 def run_demo_pipeline(payload: DemoRunRequest | None = None) -> dict[str, Any]:
     """Run one bounded demo sync pass.
@@ -724,10 +750,7 @@ def run_demo_pipeline(payload: DemoRunRequest | None = None) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except SAMGovRateLimitError as exc:
             session.rollback()
-            raise HTTPException(
-                status_code=429,
-                detail="SAM.gov API rate limit reached. No records were committed; wait for the quota reset before retrying.",
-            ) from exc
+            return _samgov_rate_limit_response(exc)
         except httpx.HTTPStatusError as exc:
             session.rollback()
             raise HTTPException(
@@ -817,10 +840,7 @@ def run_ingestion(source: str) -> dict[str, Any]:
             session.commit()
         except SAMGovRateLimitError as exc:
             session.rollback()
-            raise HTTPException(
-                status_code=429,
-                detail="SAM.gov API rate limit reached. No records were committed; wait for the quota reset before retrying.",
-            ) from exc
+            return _samgov_rate_limit_response(exc)
         except httpx.HTTPStatusError as exc:
             session.rollback()
             raise HTTPException(

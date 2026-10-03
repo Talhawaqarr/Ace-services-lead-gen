@@ -14,9 +14,11 @@ def test_local_pipeline_persists_matches_and_is_idempotent():
     assert second.status_code == 200, second.text
     second_payload = second.json()
 
+    # SAM-1003 (NAICS 221310) is no longer qualified: qualification now requires a
+    # construction-family NAICS code, so only the two 23xxx fixture notices match.
     assert first_payload["projects_discovered"] == 3
-    assert first_payload["projects_processed"] == 3
-    assert first_payload["matches_generated"] == 7
+    assert first_payload["projects_processed"] == 2
+    assert first_payload["matches_generated"] == 5
 
     assert second_payload["projects_discovered"] == first_payload["projects_discovered"]
     assert second_payload["projects_processed"] == first_payload["projects_processed"]

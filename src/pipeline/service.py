@@ -204,17 +204,41 @@ def run_bounded_demo_pipeline(
             # Imported lazily so the fixture path never requires httpx/network.
             from src.providers.live_samgov import LiveSAMGovProvider
 
-            # Single-page, non-paginating request: server-enforced tiny budget.
+            # Bounded candidate retrieval: pagination is enabled so the provider
+            # can look past a thin first page, but it is capped at 3 requests and
+            # the provider stops earlier once its own candidate target is met.
+            # The provider's candidate target and hard cap are left at their
+            # defaults, and the caller-facing DEMO_HARD_MAX_RECORDS cap still
+            # bounds the run, so this can never become unbounded retrieval.
             opportunity_provider = LiveSAMGovProvider(
                 settings.samgov_api_key,
-                auto_paginate=False,
-                max_pages=1,
+                auto_paginate=True,
+                max_pages=3,
             )
         else:
             opportunity_provider = SAMGovProvider()
 
     if contractor_provider is None:
-        contractor_provider = SAMGovContractorProvider()
+        if normalized_mode == "live":
+            if not settings.samgov_api_key:
+                raise ValueError("Live demo requires a configured SAM.gov API key")
+            # Imported lazily so the fixture path never requires httpx/network.
+            from src.providers.live_samgov_contractors import LiveSAMEntityProvider
+
+            # Single-page, non-paginating request: the same tiny server-enforced
+            # budget the opportunity side uses. Never walks the entity database.
+            contractor_provider = LiveSAMEntityProvider(
+                settings.samgov_api_key,
+                auto_paginate=False,
+                max_pages=1,
+            )
+            contractor_source = "sam_entity"
+        else:
+            contractor_provider = SAMGovContractorProvider()
+            contractor_source = "samgov"
+    else:
+        # An explicitly injected provider keeps the caller's own identity.
+        contractor_source = getattr(contractor_provider, "source_name", None) or "samgov"
 
     opportunity_summary = ingest_source_records(
         session,
@@ -225,7 +249,7 @@ def run_bounded_demo_pipeline(
     contractor_summary = ingest_contractors(
         session,
         contractor_provider,
-        source_name="samgov",
+        source_name=contractor_source,
     )
 
     run_source_ids = list(dict.fromkeys(opportunity_summary.get("source_ids") or []))
@@ -269,7 +293,7 @@ def run_bounded_demo_pipeline(
         generated_here = 0
 
         if is_qualified:
-            candidates = discover_contractors(session, project, source="samgov")
+            candidates = discover_contractors(session, project, source=contractor_source)
             if candidates:
                 matches = generate_matches(session, _project_payload(project), candidates)
                 generated_here = len(matches)

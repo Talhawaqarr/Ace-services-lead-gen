@@ -143,16 +143,17 @@ def test_samgov_place_of_performance_null_and_missing_values_stay_empty():
     assert without_place["state"] is None
 
 
-def test_samgov_top_level_state_object_is_flattened_and_long_names_trimmed():
+def test_samgov_top_level_state_object_prefers_a_real_two_letter_code():
     normalized, error = _project_record_for(
         _samgov_record(city={"Code": "Oakland", "Name": "Oakland"}, state={"Code": "CA", "Name": "California"})
     )
 
     assert error is None
     assert normalized["city"] == "Oakland"
-    # Existing behaviour for a long state string is kept: take the first word
-    # and keep the two-letter code, so a dict never leaks its repr.
+    # A nested state object is read object-aware: the real two-letter code wins,
+    # so a dict never leaks its repr into the canonical record.
     assert normalized["state"] == "CA"
+    assert "{" not in normalized["state"]
 
     foreign, error = _project_record_for(
         _samgov_record(city={"Code": "Jeddah", "Name": "Jeddah"}, state={"Code": "02", "Name": "Makkah"})
@@ -160,5 +161,102 @@ def test_samgov_top_level_state_object_is_flattened_and_long_names_trimmed():
 
     assert error is None
     assert foreign["city"] == "Jeddah"
-    assert foreign["state"].startswith("MA")
-    assert "{" not in foreign["state"]
+    # "02" is a region number and "Makkah" is a province name, so no US state is
+    # fabricated by truncating them into "02"/"MA".
+    assert foreign["state"] is None
+
+
+# --- Live SAM.gov v2 nested location objects, as observed in the raw payload ---
+
+
+NESTED_SAM_PLACE = {
+    "city": {"code": "Jeddah", "name": "Jeddah"},
+    "state": {"code": "CR-H", "name": "Heredia"},
+    "country": {"code": "CRI", "name": "Costa Rica"},
+}
+
+
+def test_nested_city_object_becomes_a_plain_city_string():
+    normalized, error = _project_record_for(_samgov_record(placeOfPerformance=dict(NESTED_SAM_PLACE)))
+
+    assert error is None
+    assert normalized["city"] == "Jeddah"
+    assert isinstance(normalized["city"], str)
+
+
+def test_nested_state_object_does_not_fabricate_a_us_state_code():
+    normalized, error = _project_record_for(_samgov_record(placeOfPerformance=dict(NESTED_SAM_PLACE)))
+
+    assert error is None
+    # "CR-H" is an ISO subdivision and "Heredia" is a province name, so neither
+    # is a two-letter US state code and no state is persisted.
+    assert normalized["state"] is None
+
+    domestic, error = _project_record_for(
+        _samgov_record(
+            placeOfPerformance={
+                "city": {"code": "Oakland", "name": "Oakland"},
+                "state": {"code": "CA", "name": "California"},
+            }
+        )
+    )
+
+    assert error is None
+    assert domestic["state"] == "CA"
+
+
+def test_nested_country_object_is_readable_from_provenance():
+    normalized, error = _project_record_for(_samgov_record(placeOfPerformance=dict(NESTED_SAM_PLACE)))
+
+    assert error is None
+    assert normalized["provenance"]["place_of_performance_country"] == "Costa Rica"
+
+
+def test_list_of_place_objects_is_normalized_instead_of_crashing():
+    normalized, error = _project_record_for(_samgov_record(placeOfPerformance=[dict(NESTED_SAM_PLACE)]))
+
+    assert error is None
+    assert normalized["city"] == "Jeddah"
+    assert normalized["state"] is None
+    assert normalized["provenance"]["place_of_performance_country"] == "Costa Rica"
+
+
+def test_no_python_dict_or_list_representation_is_persisted():
+    places = [
+        dict(NESTED_SAM_PLACE),
+        dict(NESTED_SAM_PLACE, city=[{"code": "Jeddah", "name": "Jeddah"}]),
+        dict(NESTED_SAM_PLACE, state=[{"code": "CR-H", "name": "Heredia"}]),
+        {"city": {}, "state": {}, "country": {}},
+        [dict(NESTED_SAM_PLACE)],
+    ]
+
+    for place in places:
+        normalized, error = _project_record_for(_samgov_record(placeOfPerformance=place))
+        assert error is None, place
+        for field in ("city", "state"):
+            value = normalized[field]
+            assert value is None or "{" not in value, (field, value)
+
+
+def test_plain_string_locations_are_unchanged():
+    normalized, error = _project_record_for(
+        _samgov_record(placeOfPerformance={"city": "Oakland", "state": "CA", "country": "USA"})
+    )
+
+    assert error is None
+    assert normalized["city"] == "Oakland"
+    assert normalized["state"] == "CA"
+    assert normalized["provenance"]["place_of_performance_country"] == "USA"
+
+
+def test_null_and_missing_location_shapes_do_not_crash():
+    for place in (None, [], {}, "not-a-mapping", {"city": None, "state": None}):
+        normalized, error = _project_record_for(_samgov_record(placeOfPerformance=place))
+        assert error is None, place
+        assert normalized["city"] is None, place
+        assert normalized["state"] is None, place
+
+    without_place, error = _project_record_for(_samgov_record())
+    assert error is None
+    assert without_place["city"] is None
+    assert without_place["state"] is None

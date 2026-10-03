@@ -59,11 +59,13 @@ def _normalized_text(value: Any) -> str | None:
 def _location_token(value: Any) -> str | None:
     """Flatten a location value that SAM.gov may return as a scalar or an object.
 
-    Live SAM.gov v2 returns ``placeOfPerformance.city``/``.state`` as plain strings
-    for some notices and as ``{"Code": ..., "Name": ...}`` objects for others.
-    Stringifying an object leaks a Python repr such as ``{'Code': 'Jeddah'}`` into
-    the canonical record, so prefer the human-readable ``Name`` and fall back to
-    the ``Code``. Any other shape keeps the previous string behaviour.
+    Live SAM.gov v2 returns ``placeOfPerformance.city``/``.state``/``.country`` as
+    plain strings for some notices and as ``{"code": ..., "name": ...}`` objects
+    for others. Stringifying an object leaks a Python repr such as
+    ``{'Code': 'Jeddah', 'Name': 'Jeddah'}`` into the canonical record, so prefer
+    the human-readable ``Name`` and fall back to the ``Code``. A container that
+    holds no such key yields ``None`` rather than ``str(dict)``/``str(list)``,
+    and plain strings keep their previous behaviour.
     """
     if isinstance(value, dict):
         for key in ("Name", "name", "Code", "code"):
@@ -71,14 +73,74 @@ def _location_token(value: Any) -> str | None:
             if token:
                 return token
         return None
+    if isinstance(value, (list, tuple, set)):
+        return None
     return _normalized_text(value)
 
 
+def _place_mapping(value: Any) -> dict[str, Any]:
+    """Return a location mapping from a mapping or the first entry of a list.
+
+    Live SAM.gov v2 reports ``placeOfPerformance`` and ``location`` as a list of
+    place objects, which cannot be read with ``.get``. Indexing one raised
+    ``AttributeError`` before persistence, and stringifying one leaked a Python
+    repr into the record, so the first place is treated as the canonical one and
+    any other shape means "no location reported".
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, (list, tuple)):
+        for entry in value:
+            if isinstance(entry, dict):
+                return entry
+    return {}
+
+
 def _normalize_state(value: Any) -> str | None:
+    """Normalize a place-of-performance state to a two-letter code.
+
+    Plain strings keep the previous behaviour (upper-cased, truncated to two
+    characters). A location *object* is different: SAM.gov puts the real code in
+    ``Code`` (``"CA"``) and an ISO subdivision such as ``"CR-H"``/``"02"`` or a
+    place name such as ``"Heredia"`` otherwise. Truncating those fabricated US
+    state codes out of foreign place names, so an object only yields a value when
+    it actually carries a two-letter alphabetic code.
+    """
+    if isinstance(value, dict):
+        for key in ("Code", "code", "Name", "name"):
+            token = _normalized_text(value.get(key))
+            if token and len(token) == 2 and token.isalpha():
+                return token.upper()
+        return None
     cleaned = _location_token(value)
     if cleaned is None:
         return None
     return cleaned.upper()[:2]
+
+
+def _place_of_performance_country(raw: dict[str, Any]) -> str | None:
+    """Return the place-of-performance country, never the contracting office country.
+
+    SAM.gov reports place of performance as an object and, for multi-place notices,
+    as a list of objects. Qualification for ACE's US contractor market depends on
+    this value, so it is preserved verbatim in provenance as the normalized
+    ``place_of_performance_country`` field. A missing country stays ``None`` rather
+    than defaulting to the USA, because a US contracting office routinely issues
+    notices that are performed abroad.
+    """
+    place = raw.get("placeOfPerformance")
+    if isinstance(place, list):
+        tokens = {
+            token
+            for entry in place
+            if isinstance(entry, dict)
+            for token in (_location_token(entry.get("country")),)
+            if token
+        }
+        return ", ".join(sorted(tokens)) or None
+    if isinstance(place, dict):
+        return _location_token(place.get("country"))
+    return None
 
 
 def _normalize_city(value: Any) -> str | None:
@@ -225,9 +287,10 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     if not title:
         return {}, "Missing project title"
 
-    place = raw.get("placeOfPerformance") or {}
-    state = _normalize_state((raw.get("state") or place.get("state") or (raw.get("location") or {}).get("state")))
-    city = _normalize_city((raw.get("city") or place.get("city") or (raw.get("location") or {}).get("city")))
+    place = _place_mapping(raw.get("placeOfPerformance"))
+    location = _place_mapping(raw.get("location"))
+    state = _normalize_state((raw.get("state") or place.get("state") or location.get("state")))
+    city = _normalize_city((raw.get("city") or place.get("city") or location.get("city")))
     posted_date = _normalize_date(raw.get("posted_date") or raw.get("postedDate"))
     response_deadline = _normalize_date(raw.get("response_deadline") or raw.get("responseDeadline") or raw.get("reponseDeadLine"))
     bid_date = _normalize_date(raw.get("bid_date") or raw.get("bidDate") or posted_date)
@@ -240,9 +303,13 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
     estimated_value = _normalize_numeric(raw.get("estimated_value") or raw.get("estimatedValue"))
     trades = _derive_project_trades(raw)
 
-    raw_state_token = _location_token(raw.get("state"))
-    if raw_state_token and len(raw_state_token) > 2:
-        state = _normalize_state(raw_state_token.split()[0])
+    raw_state = raw.get("state")
+    if not isinstance(raw_state, dict):
+        # A nested state object was already resolved object-aware above; only a
+        # plain string keeps the long-value behaviour of taking the first word.
+        raw_state_token = _location_token(raw_state)
+        if raw_state_token and len(raw_state_token) > 2:
+            state = _normalize_state(raw_state_token.split()[0])
 
     if raw.get("bid_date") and str(raw.get("bid_date")).lower() in {"unknown", "n/a"}:
         bid_date = None
@@ -282,6 +349,7 @@ def _project_record_for(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None
             "procurement_type": _normalized_text(raw.get("type") or raw.get("baseType")),
             "naics_code": _normalized_text(raw.get("naicsCode")),
             "classification_code": _normalized_text(raw.get("classificationCode")),
+            "place_of_performance_country": _place_of_performance_country(raw),
             "resource_links": raw.get("resourceLinks") or [],
             "point_of_contact": raw.get("pointOfContact"),
             "award_amount": _normalize_numeric((raw.get("data") or {}).get("award", {}).get("amount")),
