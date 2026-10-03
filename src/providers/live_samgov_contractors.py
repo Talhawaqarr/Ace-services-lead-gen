@@ -88,10 +88,11 @@ def _trades_from_naics(core_data: dict[str, Any]) -> list[str] | None:
 
 
 def _poc_email(core_data: dict[str, Any]) -> str | None:
-    """Return a public point-of-contact email only when the API exposes one.
+    """Return a SAM point-of-contact email when the API exposes one.
 
-    The public Entity API does not publish a general company contact mailbox, so
-    the email stays empty rather than being invented.
+    SAM Entity POC email is treated as potentially restricted/FOUO/CUI data and
+    is not a general public company contact mailbox. The provider only maps what
+    is explicitly supplied and does not invent an email when absent.
     """
     points = core_data.get("pointsOfContact")
     if not isinstance(points, list):

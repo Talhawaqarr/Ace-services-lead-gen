@@ -143,7 +143,7 @@ def test_provider_tolerates_missing_and_null_nested_fields():
     assert contractors[1]["trades"] is None
 
 
-def test_provider_uses_public_poc_email_when_present_and_never_invents_one():
+def test_provider_maps_supplied_poc_email_when_present_and_never_invents_one():
     def handler(request: httpx.Request) -> httpx.Response:
         entity = _entity()
         entity["coreData"]["pointsOfContact"] = [
