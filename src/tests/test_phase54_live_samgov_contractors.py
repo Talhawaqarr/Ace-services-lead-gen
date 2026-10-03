@@ -70,6 +70,94 @@ def test_provider_targets_v3_endpoint_with_api_key_and_bounded_params():
     assert captured["params"]["size"] == "10"
 
 
+def test_provider_sends_bid_targeted_entity_filters_for_qualified_bid():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(200, json={"entityData": [_entity()]})
+
+    provider = LiveSAMEntityProvider("secret", http_client=_client(handler), auto_paginate=False)
+    provider.list_contractors({
+        "primaryNaics": "236220",
+        "physicalAddressProvinceOrStateCode": "CA",
+        "physicalAddressCity": "SACRAMENTO",
+    })
+
+    assert captured["params"]["primaryNaics"] == "236220"
+    assert captured["params"]["physicalAddressProvinceOrStateCode"] == "CA"
+    assert captured["params"]["physicalAddressCity"] == "SACRAMENTO"
+
+
+def test_provider_omits_empty_optional_bid_filters():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(200, json={"entityData": [_entity()]})
+
+    provider = LiveSAMEntityProvider("secret", http_client=_client(handler), auto_paginate=False)
+    provider.list_contractors({
+        "primaryNaics": "236220",
+        "physicalAddressProvinceOrStateCode": "",
+        "physicalAddressCity": None,
+    })
+
+    assert captured["params"]["primaryNaics"] == "236220"
+    assert "physicalAddressProvinceOrStateCode" not in captured["params"]
+    assert "physicalAddressCity" not in captured["params"]
+
+
+def test_provider_makes_only_one_bounded_request():
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"entityData": [_entity()]})
+
+    provider = LiveSAMEntityProvider(
+        "secret",
+        http_client=_client(handler),
+        auto_paginate=False,
+        max_pages=5,
+        page_size=10,
+    )
+    provider.list_contractors({
+        "primaryNaics": "236220",
+        "physicalAddressProvinceOrStateCode": "CA",
+        "physicalAddressCity": "SACRAMENTO",
+    })
+
+    assert len(requests) == 1
+    params = dict(requests[0].url.params)
+    assert params["page"] == "0"
+    assert params["size"] == "10"
+    assert params["primaryNaics"] == "236220"
+
+
+def test_provider_zero_result_keeps_the_single_bounded_request():
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"entityData": []})
+
+    provider = LiveSAMEntityProvider(
+        "secret",
+        http_client=_client(handler),
+        auto_paginate=False,
+        max_pages=1,
+    )
+    result = provider.list_contractors({
+        "primaryNaics": "236220",
+        "physicalAddressProvinceOrStateCode": "CA",
+        "physicalAddressCity": "SACRAMENTO",
+    })
+
+    assert result["contractors"] == []
+    assert len(requests) == 1
+
+
 def test_provider_parses_entity_data_and_maps_company_uei_city_state():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"entityData": [_entity()]})

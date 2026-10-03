@@ -82,6 +82,30 @@ def contractor_source_for(project: Project) -> str:
     return FIXTURE_CONTRACTOR_SOURCE
 
 
+def build_bid_targeted_entity_filters(project: Project | None) -> dict[str, Any]:
+    """Return documented SAM Entity filters derived from a qualified bid.
+
+    Prefer the bid's actual NAICS code, then state, then city. This keeps the
+    live query targeted without inventing NAICS values from generic trade labels.
+    """
+    if project is None:
+        return {}
+    filters: dict[str, Any] = {}
+    provenance = project.provenance if isinstance(project.provenance, dict) else {}
+    naics = provenance.get("naics_code")
+    if naics is not None:
+        cleaned = str(naics).strip()
+        if cleaned:
+            filters["primaryNaics"] = cleaned
+    state = str(project.state or "").strip().upper()
+    if state:
+        filters["physicalAddressProvinceOrStateCode"] = state
+    city = str(project.city or "").strip().upper()
+    if city:
+        filters["physicalAddressCity"] = city
+    return filters
+
+
 def discover_contractors(
     session: Session,
     project: Project,
@@ -276,13 +300,28 @@ def run_bounded_demo_pipeline(
         source_name="samgov",
         filters=filters,
     )
+
+    run_source_ids = list(dict.fromkeys(opportunity_summary.get("source_ids") or []))
+
+    projects = session.execute(
+        select(Project)
+        .where(Project.source == "samgov", Project.source_id.in_(run_source_ids))
+        .order_by(Project.response_deadline.asc().nullslast(), Project.name.asc())
+    ).scalars().all()
+
+    contractor_filters: dict[str, Any] = {}
+    if normalized_mode == "live" and projects:
+        for project in projects:
+            if qualifies_opportunity(project, deadline_within_days=deadline_within_days):
+                contractor_filters = build_bid_targeted_entity_filters(project)
+                break
+
     contractor_summary = ingest_contractors(
         session,
         contractor_provider,
         source_name=contractor_source,
+        filters=contractor_filters,
     )
-
-    run_source_ids = list(dict.fromkeys(opportunity_summary.get("source_ids") or []))
 
     if not run_source_ids:
         session.flush()
@@ -299,13 +338,6 @@ def run_bounded_demo_pipeline(
             "projects": [],
             "empty": True,
         }
-
-    # Scope strictly to the records fetched by this run.
-    projects = session.execute(
-        select(Project)
-        .where(Project.source == "samgov", Project.source_id.in_(run_source_ids))
-        .order_by(Project.response_deadline.asc().nullslast(), Project.name.asc())
-    ).scalars().all()
 
     qualified_ids = {
         project.id

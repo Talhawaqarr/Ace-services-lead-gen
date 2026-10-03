@@ -16,6 +16,15 @@ DEFAULT_INCLUDE_SECTIONS = "entityRegistration,coreData"
 
 # The synchronous Entity Management API returns at most 10 records per page.
 MAX_PAGE_SIZE = 10
+ENTITY_REQUEST_FILTER_KEYS = {
+    "primaryNaics",
+    "naicsCode",
+    "physicalAddressProvinceOrStateCode",
+    "physicalAddressCity",
+    "physicalAddressZipPostalCode",
+    "physicalAddressCountryCode",
+    "q",
+}
 
 # Only NAICS families the repository already models as trades are mapped.
 # Anything else is preserved in provenance rather than forced into the runtime
@@ -38,6 +47,27 @@ def _text(value: Any) -> str | None:
         return None
     cleaned = str(value).strip()
     return cleaned or None
+
+
+def _normalize_entity_filters(filters: dict[str, Any] | None) -> dict[str, str]:
+    if not isinstance(filters, dict):
+        return {}
+    normalized: dict[str, str] = {}
+    for key, value in filters.items():
+        if key not in ENTITY_REQUEST_FILTER_KEYS:
+            continue
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple, set)):
+            cleaned = [str(item).strip() for item in value if str(item).strip()]
+            if not cleaned:
+                continue
+            normalized[key] = cleaned[0]
+            continue
+        cleaned = str(value).strip()
+        if cleaned:
+            normalized[key] = cleaned
+    return normalized
 
 
 def _section(entity: dict[str, Any], name: str) -> dict[str, Any]:
@@ -235,7 +265,7 @@ class LiveSAMEntityProvider(ContractorProvider):
                 raise ValueError("SAM.gov Entity API response is missing entityData")
             return payload
 
-    def _list_page(self, page_token: str | None) -> dict[str, Any]:
+    def _list_page(self, page_token: str | None, *, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
             page = max(0, int(page_token)) if page_token is not None else 0
         except (TypeError, ValueError):
@@ -246,6 +276,7 @@ class LiveSAMEntityProvider(ContractorProvider):
             "page": page,
             "size": self.page_size,
             **self.extra_params,
+            **_normalize_entity_filters(filters),
         }
         payload = self._request(params)
 
@@ -282,9 +313,9 @@ class LiveSAMEntityProvider(ContractorProvider):
         filters: dict[str, Any] | None = None,
         page_token: str | None = None,
     ) -> dict[str, Any]:
-        # Only the page cursor is honoured; unknown filters are ignored rather
-        # than forwarded as guessed parameter names.
-        first = self._list_page(page_token)
+        # Supported parameters are the documented SAM.gov Entity filters. Unknown
+        # keys are ignored so we do not guess a parameter contract.
+        first = self._list_page(page_token, filters=filters)
         if not self.auto_paginate or page_token is not None:
             return first
 
@@ -298,7 +329,7 @@ class LiveSAMEntityProvider(ContractorProvider):
             if pages_fetched >= self.max_pages:
                 truncated = True
                 break
-            page = self._list_page(next_token)
+            page = self._list_page(next_token, filters=filters)
             contractors.extend(page["contractors"])
             next_token = page["next_page_token"]
             pages_fetched += 1
